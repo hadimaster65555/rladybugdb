@@ -1,0 +1,97 @@
+#!/bin/sh
+# configure — downloads the prebuilt LadybugDB C library from LadybugDB/ladybug releases.
+# Called automatically by R CMD INSTALL.
+
+set -e
+
+LBUG_VERSION=$(cat tools/lbug_version | tr -d '[:space:]')
+ARCH=$(uname -m)   # arm64, x86_64, aarch64
+OS=$(uname -s)     # Darwin, Linux
+
+VENDOR_INC="$(pwd)/src/vendor/include"
+INST_LIBS="$(pwd)/inst/libs"
+
+mkdir -p "$VENDOR_INC" "$INST_LIBS"
+
+# ── Detect platform and set artifact name ─────────────────────────────────
+case "$OS" in
+  Darwin)
+    ARTIFACT="liblbug-osx-universal.tar.gz"
+    LIB_EXT=".dylib"
+    RPATH_FLAG="-Wl,-rpath,@loader_path"
+    ;;
+  Linux)
+    case "$ARCH" in
+      x86_64)  ARTIFACT="liblbug-linux-x86_64.tar.gz" ;;
+      aarch64) ARTIFACT="liblbug-linux-aarch64.tar.gz" ;;
+      *)
+        echo "configure: Unsupported Linux arch: $ARCH"; exit 1 ;;
+    esac
+    LIB_EXT=".so"
+    RPATH_FLAG="-Wl,-rpath,\\\$\\\$ORIGIN"
+    ;;
+  *)
+    echo "configure: Unsupported OS: $OS"; exit 1 ;;
+esac
+
+LBUG_LIB="$INST_LIBS/liblbug${LIB_EXT}"
+
+# ── Skip download if already vendored ────────────────────────────────────
+if [ -f "$VENDOR_INC/lbug.h" ] && [ -f "$LBUG_LIB" ]; then
+  echo "configure: pre-vendored liblbug found — skipping download."
+else
+  URL="https://github.com/LadybugDB/ladybug/releases/download/v${LBUG_VERSION}/${ARTIFACT}"
+  echo "configure: downloading LadybugDB v${LBUG_VERSION} for ${OS}-${ARCH}..."
+  echo "configure: URL = ${URL}"
+
+  TMPDIR_DL=$(mktemp -d)
+  trap 'rm -rf "$TMPDIR_DL"' EXIT
+
+  if ! curl -fsSL --max-time 300 "$URL" -o "$TMPDIR_DL/liblbug.tar.gz"; then
+    echo "configure: ERROR — download failed."
+    echo "  Tried: $URL"
+    echo "  Check your internet connection or set LBUG_VERSION in tools/lbug_version."
+    exit 1
+  fi
+
+  tar -xzf "$TMPDIR_DL/liblbug.tar.gz" -C "$TMPDIR_DL/"
+
+  # Copy header
+  HDR=$(find "$TMPDIR_DL" -name "lbug.h" 2>/dev/null | head -1)
+  if [ -z "$HDR" ]; then
+    echo "configure: ERROR — lbug.h not found in archive."; exit 1
+  fi
+  cp "$HDR" "$VENDOR_INC/lbug.h"
+
+  # Copy shared library
+  if [ "$OS" = "Darwin" ]; then
+    LIB=$(find "$TMPDIR_DL" -name "liblbug.dylib" 2>/dev/null | head -1)
+  else
+    LIB=$(find "$TMPDIR_DL" \( -name "liblbug.so" -o -name "liblbug.so.*" \) 2>/dev/null | head -1)
+  fi
+  if [ -z "$LIB" ]; then
+    echo "configure: ERROR — shared library not found in archive."; exit 1
+  fi
+  cp "$LIB" "$LBUG_LIB"
+
+  # ── macOS: fix install name so the dylib can be found via @rpath ─────
+  # The downloaded dylib has install name @rpath/liblbug.0.dylib (versioned).
+  # We rename it to @rpath/liblbug.dylib to match the filename we ship.
+  if [ "$OS" = "Darwin" ] && command -v install_name_tool >/dev/null 2>&1; then
+    install_name_tool -id "@rpath/liblbug.dylib" "$LBUG_LIB" 2>/dev/null || true
+    echo "configure: fixed dylib install name to @rpath/liblbug.dylib"
+  fi
+
+  echo "configure: installed lbug.h and liblbug${LIB_EXT}."
+fi
+
+# ── Generate src/Makevars ────────────────────────────────────────────────
+sed "s|@VENDOR_INC@|${VENDOR_INC}|g;
+     s|@INST_LIBS@|${INST_LIBS}|g;
+     s|@LIB_EXT@|${LIB_EXT}|g;
+     s|@RPATH_FLAG@|${RPATH_FLAG}|g" \
+    src/Makevars.in > src/Makevars
+
+echo "configure: src/Makevars written."
+echo "  CPPFLAGS : -I\"${VENDOR_INC}\""
+echo "  LIBS     : \"${LBUG_LIB}\" ${RPATH_FLAG}"

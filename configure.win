@@ -1,0 +1,47 @@
+#!/bin/sh
+# configure.win — downloads the prebuilt LadybugDB C library for Windows.
+
+set -e
+
+LBUG_VERSION=$(cat tools/lbug_version | tr -d '[:space:]')
+ARTIFACT="liblbug-windows-x86_64.zip"
+URL="https://github.com/LadybugDB/ladybug/releases/download/v${LBUG_VERSION}/${ARTIFACT}"
+
+VENDOR_INC="$(pwd)/src/vendor/include"
+INST_LIBS="$(pwd)/inst/libs"
+
+mkdir -p "$VENDOR_INC" "$INST_LIBS"
+
+if [ -f "$VENDOR_INC/lbug.h" ] && [ -f "$INST_LIBS/liblbug.dll" ]; then
+  echo "configure.win: pre-vendored liblbug found — skipping download."
+else
+  echo "configure.win: downloading LadybugDB v${LBUG_VERSION} for Windows..."
+  TMPDIR_DL=$(mktemp -d)
+  trap 'rm -rf "$TMPDIR_DL"' EXIT
+
+  curl -fsSL --max-time 300 "$URL" -o "$TMPDIR_DL/liblbug.zip" || {
+    echo "configure.win: ERROR — download failed: $URL"; exit 1
+  }
+  unzip -q "$TMPDIR_DL/liblbug.zip" -d "$TMPDIR_DL/"
+
+  HDR=$(find "$TMPDIR_DL" -name "lbug.h" 2>/dev/null | head -1)
+  LIB=$(find "$TMPDIR_DL" -name "liblbug.dll.a" -o -name "liblbug.lib" 2>/dev/null | head -1)
+  DLL=$(find "$TMPDIR_DL" -name "liblbug.dll" 2>/dev/null | head -1)
+
+  [ -z "$HDR" ] && { echo "configure.win: ERROR — lbug.h not found."; exit 1; }
+  [ -z "$DLL" ] && { echo "configure.win: ERROR — liblbug.dll not found."; exit 1; }
+
+  cp "$HDR" "$VENDOR_INC/lbug.h"
+  cp "$DLL" "$INST_LIBS/liblbug.dll"
+  [ -n "$LIB" ] && cp "$LIB" "$INST_LIBS/liblbug.dll.a"
+
+  echo "configure.win: done."
+fi
+
+# Generate Makevars.win
+cat > src/Makevars.win <<EOF
+PKG_CPPFLAGS = -I"${VENDOR_INC}"
+PKG_LIBS     = "${INST_LIBS}/liblbug.dll.a"
+CXX_STD      = CXX17
+EOF
+echo "configure.win: src/Makevars.win written."

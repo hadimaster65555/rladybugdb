@@ -1,0 +1,5 @@
+
+# Vendored C library artifacts (populated by configure or tools/vendor.R)
+src/vendor/include/
+src/vendor/lib/
+src/Makevars

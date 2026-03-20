@@ -1,0 +1,32 @@
+Package: rladybugdb
+Title: R Interface to LadybugDB Embedded Graph Database
+Version: 0.2.0
+Authors@R:
+    person("First", "Last", email = "first.last@example.com", role = c("aut", "cre"))
+Description: Provides an R interface to LadybugDB, an embedded columnar graph
+    database using the Cypher query language. LadybugDB is a fork of KuzuDB
+    with the same query interface. This package uses native Rcpp bindings to
+    the LadybugDB C library, requiring no Python runtime.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
+NeedsCompilation: yes
+SystemRequirements: C++17
+Imports:
+    Rcpp (>= 1.0.0),
+    rlang (>= 1.0.0)
+LinkingTo:
+    Rcpp
+Suggests:
+    arrow,
+    tibble,
+    igraph,
+    tidygraph,
+    testthat (>= 3.0.0),
+    withr,
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr
+URL: https://github.com/rladybugdb/rladybugdb
+BugReports: https://github.com/rladybugdb/rladybugdb/issues
