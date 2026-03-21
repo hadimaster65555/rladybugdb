@@ -37,7 +37,7 @@ Install from GitHub:
 
 ```r
 # install.packages("remotes")
-remotes::install_github("rladybugdb/rladybugdb")
+remotes::install_github("hadimaster65555/rladybugdb")
 ```
 
 The `configure` script downloads the prebuilt `liblbug` binary for your

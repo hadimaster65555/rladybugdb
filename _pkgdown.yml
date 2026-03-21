@@ -17,7 +17,7 @@ navbar:
   components:
     github:
       icon: fab fa-github
-      href: https://github.com/rladybugdb/rladybugdb
+      href: https://github.com/hadimaster65555/rladybugdb
 
 reference:
   - title: "Connect"

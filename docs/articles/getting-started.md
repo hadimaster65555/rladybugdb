@@ -21,7 +21,7 @@ Install from GitHub:
 ``` r
 
 # install.packages("remotes")
-remotes::install_github("rladybugdb/rladybugdb")
+remotes::install_github("hadimaster65555/rladybugdb")
 ```
 
 The `configure` script downloads the prebuilt `liblbug` binary for your
@@ -275,10 +275,10 @@ result <- lb_execute(conn,
   "MATCH (p:Person)-[r:LivesIn]->(c:City) RETURN p, r, c")
 g <- as_igraph(result)
 print(g)
-#> IGRAPH 6517445 DN-- 4 2 -- 
+#> IGRAPH f0871c8 DN-- 4 2 -- 
 #> + attr: name (v/c), _LABEL (v/c), age (v/n), country (v/c), _LABEL
 #> | (e/c), since (e/n)
-#> + edges from 6517445 (vertex names):
+#> + edges from f0871c8 (vertex names):
 #> [1] Alice->London Bob  ->Paris
 ```
 

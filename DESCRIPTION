@@ -1,8 +1,9 @@
 Package: rladybugdb
 Title: R Interface to LadybugDB Embedded Graph Database
 Version: 0.2.0
-Authors@R:
-    person("First", "Last", email = "first.last@example.com", role = c("aut", "cre"))
+Authors@R: c(
+    person("Raden Muhammad", "Hadi", role = c("aut", "cre")),
+    person("Claude", role = "aut", comment = "Anthropic AI assistant"))
 Description: Provides an R interface to LadybugDB, an embedded columnar graph
     database using the Cypher query language. LadybugDB is a fork of KuzuDB
     with the same query interface. This package uses native Rcpp bindings to
@@ -28,5 +29,5 @@ Suggests:
     knitr,
     rmarkdown
 VignetteBuilder: knitr
-URL: https://github.com/rladybugdb/rladybugdb
-BugReports: https://github.com/rladybugdb/rladybugdb/issues
+URL: https://github.com/hadimaster65555/rladybugdb
+BugReports: https://github.com/hadimaster65555/rladybugdb/issues

@@ -26,7 +26,7 @@ same **openCypher** query dialect.
 ``` r
 
 # install.packages("remotes")
-remotes::install_github("rladybugdb/rladybugdb")
+remotes::install_github("hadimaster65555/rladybugdb")
 ```
 
 The prebuilt LadybugDB C library is downloaded automatically during

@@ -16,7 +16,7 @@ LadybugDB is a fork of [KuzuDB](https://kuzudb.com) and supports the same **open
 
 ```r
 # install.packages("remotes")
-remotes::install_github("rladybugdb/rladybugdb")
+remotes::install_github("hadimaster65555/rladybugdb")
 ```
 
 The prebuilt LadybugDB C library is downloaded automatically during `R CMD INSTALL` via the `configure` script (macOS/Linux) or `configure.win` (Windows). No other setup is needed.
@@ -179,7 +179,7 @@ The pinned library version is in `tools/lbug_version`.
 ## Contributing
 
 Bug reports and pull requests are welcome at
-<https://github.com/rladybugdb/rladybugdb/issues>.
+<https://github.com/hadimaster65555/rladybugdb/issues>.
 
 ---
 
