@@ -85,6 +85,19 @@ else
   echo "configure: installed lbug.h and liblbug${LIB_EXT}."
 fi
 
+# ── macOS: thin universal dylib to the active architecture ───────────────
+# R's staged-install path check misreads multi-arch `otool -l` output and
+# treats the extra architecture header as a hard-coded temporary path.
+if [ "$OS" = "Darwin" ] && command -v lipo >/dev/null 2>&1; then
+  THIN_LIB="${LBUG_LIB}.thin"
+  if lipo -thin "$ARCH" "$LBUG_LIB" -output "$THIN_LIB" 2>/dev/null; then
+    mv "$THIN_LIB" "$LBUG_LIB"
+    echo "configure: thinned dylib to ${ARCH}"
+  else
+    rm -f "$THIN_LIB"
+  fi
+fi
+
 # ── Generate src/Makevars ────────────────────────────────────────────────
 sed "s|@VENDOR_INC@|${VENDOR_INC}|g;
      s|@INST_LIBS@|${INST_LIBS}|g;

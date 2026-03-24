@@ -2,7 +2,7 @@ Package: rladybugdb
 Title: R Interface to LadybugDB Embedded Graph Database
 Version: 0.2.0
 Authors@R: c(
-    person("Raden Muhammad", "Hadi", role = c("aut", "cre")),
+    person("Raden Muhammad", "Hadi", email = "hadimaster65555@gmail.com", role = c("aut", "cre")),
     person("Claude", role = "aut", comment = "Anthropic AI assistant"))
 Description: Provides an R interface to LadybugDB, an embedded columnar graph
     database using the Cypher query language. LadybugDB is a fork of KuzuDB
