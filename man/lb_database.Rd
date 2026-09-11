@@ -4,26 +4,24 @@
 \alias{lb_database}
 \title{Open a LadybugDB database}
 \usage{
-lb_database(path = ":memory:", read_only = FALSE)
+lb_database(path = ":memory:", read_only = FALSE, config = list())
 }
 \arguments{
-\item{path}{File-system path to the database directory, or \code{":memory:"} for
-an ephemeral in-memory database.}
+\item{path}{File-system path, or \code{":memory:"} for an ephemeral database.}
 
-\item{read_only}{Logical. Open the database in read-only mode? Default
-\code{FALSE}.}
+\item{read_only}{Open in read-only mode?}
+
+\item{config}{Named list of LadybugDB system configuration overrides. Valid
+names are \code{buffer_pool_size}, \code{max_num_threads}, \code{enable_compression},
+\code{max_db_size}, \code{auto_checkpoint}, \code{checkpoint_threshold},
+\code{throw_on_wal_replay_failure}, \code{enable_checksums}, \code{enable_multi_writes},
+and \code{enable_default_hash_index} (\code{thread_qos} is also accepted on macOS).}
 }
 \value{
-An object of class \code{lb_database} (an opaque wrapper around the
-underlying Python \code{Database} object).
+An \code{lb_database} object.
 }
 \description{
-Creates (or opens) a LadybugDB database at the given path. Use
-\code{":memory:"} for an in-memory database.
-}
-\examples{
-\dontrun{
-db <- lb_database(":memory:")
-}
-
+Creates or opens a LadybugDB database. LadybugDB v0.20.4 can read the
+storage formats created by v0.15.x. For incompatible future formats, export
+with the original engine and import into a fresh database.
 }

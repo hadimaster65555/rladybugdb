@@ -1,3 +1,0 @@
-PKG_CPPFLAGS = -I"$(CURDIR)/vendor/include"
-PKG_LIBS     = -L"$(CURDIR)/vendor/lib" -llbug
-CXX_STD      = CXX17

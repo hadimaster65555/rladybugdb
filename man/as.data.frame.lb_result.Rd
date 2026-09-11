@@ -2,23 +2,19 @@
 % Please edit documentation in R/convert.R
 \name{as.data.frame.lb_result}
 \alias{as.data.frame.lb_result}
-\title{Convert an lb_result to a data frame}
+\title{Convert a LadybugDB result to a data frame}
 \usage{
-\method{as.data.frame}{lb_result}(x, ..., use_arrow = TRUE)
+\method{as.data.frame}{lb_result}(x, ...)
 }
 \arguments{
-\item{x}{An \code{lb_result} object.}
+\item{x}{An \code{lb_result}.}
 
-\item{...}{Unused; kept for S3 compatibility.}
-
-\item{use_arrow}{Logical. Attempt the Arrow pathway when the \code{arrow} package
-is installed? Default \code{TRUE}.}
+\item{...}{Unused.}
 }
 \value{
-A \code{data.frame}.
+A data frame.
 }
 \description{
-Retrieves all rows from a LadybugDB query result as an R \code{data.frame}.
-When the \code{arrow} package is available the conversion goes through the
-Arrow IPC pathway (zero-copy for numeric types); otherwise pandas is used.
+Materialization preserves the current streaming cursor, so it is repeatable
+and does not change subsequent calls to \code{\link[=lb_fetch]{lb_fetch()}}.
 }

@@ -2,31 +2,21 @@
 % Please edit documentation in R/load_data.R
 \name{lb_copy_from_df}
 \alias{lb_copy_from_df}
-\title{Load an R data frame into a LadybugDB table via CSV}
+\title{Load an R data frame into a LadybugDB table}
 \usage{
 lb_copy_from_df(conn, df, table)
 }
 \arguments{
-\item{conn}{An \code{lb_connection} object.}
+\item{conn}{An \code{lb_connection}.}
 
-\item{df}{A \code{data.frame} (or tibble) to load.}
+\item{df}{A data frame.}
 
-\item{table}{Character. The name of the target node or relationship table.}
+\item{table}{Existing target table name.}
 }
 \value{
-Invisible \code{NULL}. Called for its side effect.
+An \code{lb_result}.
 }
 \description{
-Writes \code{df} to a temporary CSV file and executes a \code{COPY} statement to load
-it into \code{table}. The table must already exist in the database.
-}
-\examples{
-\dontrun{
-db   <- lb_database(":memory:")
-conn <- lb_connection(db)
-lb_execute(conn, "CREATE NODE TABLE Person (name STRING, age INT64, PRIMARY KEY(name))")
-people <- data.frame(name = c("Alice", "Bob"), age = c(30L, 25L))
-lb_copy_from_df(conn, people, "Person")
-}
-
+Uses native Arrow transport when the optional \code{arrow} package is available.
+Otherwise it uses the explicit CSV loader as a compatibility fallback.
 }

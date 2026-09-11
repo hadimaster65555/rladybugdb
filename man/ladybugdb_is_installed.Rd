@@ -2,16 +2,15 @@
 % Please edit documentation in R/install.R
 \name{ladybugdb_is_installed}
 \alias{ladybugdb_is_installed}
-\title{Check whether real_ladybug is importable}
+\title{Check whether LadybugDB is available}
 \usage{
 ladybugdb_is_installed()
 }
 \value{
-\code{TRUE} if the Python package \code{real_ladybug} can be imported,
-\code{FALSE} otherwise.
+\code{TRUE} or \code{FALSE}.
 }
 \description{
-Check whether real_ladybug is importable
+Returns \code{TRUE} if the native LadybugDB C library is loaded and functional.
 }
 \examples{
 ladybugdb_is_installed()

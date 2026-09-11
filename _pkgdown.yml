@@ -26,24 +26,40 @@ reference:
       - lb_database
       - lb_connection
       - lb_close
+      - with_lb_connection
+      - Ladybug
 
   - title: "Query"
     desc: "Run Cypher queries against an open connection."
     contents:
       - lb_execute
       - lb_query
+      - lb_fetch
+      - lb_has_next
+      - lb_reset
+      - lb_result_info
+      - lb_query_summary
+      - lb_next_result
+
+  - title: "Query control"
+    contents:
+      - lb_set_timeout
+      - lb_interrupt
+      - lb_begin
 
   - title: "Load data"
     desc: "Bulk-load R data frames or CSV files into LadybugDB tables."
     contents:
       - lb_copy_from_df
       - lb_copy_from_csv
+      - lb_copy_from_arrow
 
   - title: "Result conversion"
     desc: "Convert an `lb_result` into standard R data structures."
     contents:
       - as.data.frame.lb_result
       - as_arrow_table
+      - lb_fetch_arrow
       - as_tibble.lb_result
 
   - title: "Graph analysis"
@@ -51,6 +67,10 @@ reference:
     contents:
       - as_igraph
       - as_tbl_graph
+
+  - title: "Extensions"
+    contents:
+      - lb_list_extensions
 
   - title: "Package info"
     desc: "Check the installed C library version and compatibility."
@@ -68,3 +88,7 @@ articles:
     navbar: "OpenFlights"
     contents:
       - openflights-analysis
+  - title: "Integration and migration"
+    contents:
+      - extensions
+      - storage-migration

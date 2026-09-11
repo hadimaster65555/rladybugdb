@@ -2,29 +2,23 @@
 % Please edit documentation in R/install.R
 \name{ladybugdb_install}
 \alias{ladybugdb_install}
-\title{Install the real_ladybug Python package}
+\title{Install the LadybugDB C library (deprecated)}
 \usage{
-ladybugdb_install(envname = NULL, method = "auto", ...)
+ladybugdb_install(...)
 }
 \arguments{
-\item{envname}{Name of the Python / conda environment to install into.
-Defaults to \code{NULL} (uses the currently active reticulate environment).}
-
-\item{method}{Installation method passed to \code{\link[reticulate:py_install]{reticulate::py_install()}}.
-\code{"auto"} tries pip first.}
-
-\item{...}{Additional arguments forwarded to \code{\link[reticulate:py_install]{reticulate::py_install()}}.}
+\item{...}{Ignored.}
 }
 \value{
-Invisible \code{NULL}. Called for its side effect.
+Invisible \code{NULL}.
 }
 \description{
-Uses \code{reticulate::py_install()} to install \code{real_ladybug} into the active
-Python environment. Run this once after installing the R package.
+This function is deprecated. The C library is now bundled with the package
+and no Python installation is required.
 }
 \examples{
 \dontrun{
-ladybugdb_install()
+ladybugdb_install()  # no longer needed
 }
 
 }

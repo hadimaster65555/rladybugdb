@@ -28,6 +28,10 @@ lb_execute <- function(conn, query, parameters = NULL) {
     rlang::abort("`query` must be a single character string.",
                  class = "rladybugdb_error_invalid_arg")
   }
+  if (is.na(query) || !nzchar(query)) {
+    rlang::abort("`query` must not be missing or empty.",
+                 class = "rladybugdb_error_invalid_arg")
+  }
 
   ptr <- if (is.null(parameters)) {
     .lb_handle_error(lb_connection_execute(conn$ptr, query))
@@ -36,7 +40,28 @@ lb_execute <- function(conn, query, parameters = NULL) {
       rlang::abort("`parameters` must be a named list or NULL.",
                    class = "rladybugdb_error_invalid_arg")
     }
-    .lb_handle_error(lb_connection_execute_params(conn$ptr, query, parameters))
+    parameter_names <- names(parameters)
+    if (is.null(parameter_names) || length(parameter_names) != length(parameters) ||
+        anyNA(parameter_names) || any(!nzchar(parameter_names)) || anyDuplicated(parameter_names)) {
+      rlang::abort(
+        "`parameters` must have non-empty, unique names.",
+        class = "rladybugdb_error_invalid_arg"
+      )
+    }
+    tryCatch(
+      lb_connection_execute_params(conn$ptr, enc2utf8(query), parameters),
+      error = function(e) {
+        labels <- paste(sprintf("`%s`", parameter_names), collapse = ", ")
+        message <- sprintf("Failed to prepare or bind parameter(s) %s: %s",
+                           labels, conditionMessage(e))
+        rlang::abort(
+          message,
+          class = c("rladybugdb_error_bind", "rladybugdb_error_query",
+                    "rladybugdb_error"),
+          parent = e
+        )
+      }
+    )
   }
 
   new_lb_result(ptr, conn = conn, query = query)
@@ -65,5 +90,6 @@ lb_execute <- function(conn, query, parameters = NULL) {
 #' @export
 lb_query <- function(conn, query, parameters = NULL, ...) {
   result <- lb_execute(conn, query, parameters = parameters)
+  on.exit(lb_close(result), add = TRUE)
   as.data.frame(result, ...)
 }

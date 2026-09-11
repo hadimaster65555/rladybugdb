@@ -1,0 +1,12 @@
+# LadybugDB v0.20.4 release asset SHA-256 digests.
+# Source: https://api.github.com/repos/LadybugDB/ladybug/releases/tags/v0.20.4
+liblbug-linux-aarch64.tar.gz 0f377afb6a04fda67c2b2eef1e57c983c4783f6778a2c2ee538ca1fd41366a00
+liblbug-linux-x86_64.tar.gz 34e3914cfda9d3d88cc46d4c2518411997d3b66c1af31e5363abc4cc985f47d1
+liblbug-osx-arm64.tar.gz c5e4f31bf570aa5f3092a05e3b3acf0117acbbfd86833d3ba8216501105e2d8b
+liblbug-osx-x86_64.tar.gz 71cd002dd3371017376e6a9debeb024a200e8d4a21c77b96daa3ed15c5273910
+liblbug-windows-arm64.zip 07da742144bf2c60ff3a06445db789cdd7aebe659c4fb7423790991c52dad843
+liblbug-windows-x86_64.zip 86bf916c2097b803e2ec2c82b8f0994a452e56e8a086e23bc9452797defd597f
+liblbug-static-linux-aarch64-compat.tar.gz 7053d0501d6f28adc875b8a0325b59cb34bb52291223ff4932fc4adf3a8615a7
+liblbug-static-linux-x86_64-compat.tar.gz 799f18f165fa15075b049d71e8429e0ff9f7688be5d186c4973d111a6980509a
+liblbug-static-osx-arm64.tar.gz 7a6c574b6d681803455f50bc83a951eacb8707be8fe110d1ac7c3aec1201f1a2
+liblbug-static-osx-x86_64.tar.gz 886b008b24b81fa880e65b00e76ac1d0724ce7e5a5aa3a675365c8e48cc6cb59

@@ -3,3 +3,7 @@
 src/vendor/include/
 src/vendor/lib/
 src/Makevars
+src/*.o
+src/*.so
+src/*.dll
+src/*.dylib

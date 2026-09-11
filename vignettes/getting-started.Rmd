@@ -1,262 +1,182 @@
 ---
-title: "Getting Started with rladybugdb"
+title: "Getting started with rladybugdb"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Getting Started with rladybugdb}
+  %\VignetteIndexEntry{Getting started with rladybugdb}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
 
-```{r setup, include = FALSE}
+```{r setup, include=FALSE}
 library(rladybugdb)
-knitr::opts_chunk$set(
-  collapse  = TRUE,
-  comment   = "#>",
-  eval      = ladybugdb_is_installed()
-)
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 ```
 
-## Introduction
+`rladybugdb` is a native R interface to LadybugDB, an embedded columnar graph
+database formerly known as Kuzu. It links directly to the LadybugDB 0.20.4 C
+API and requires neither Python nor a database server.
 
-`rladybugdb` provides an R interface to **LadybugDB**, an embedded columnar
-graph database that uses the **openCypher** query language. LadybugDB is a fork
-of [KuzuDB](https://kuzudb.com) and supports the same Cypher dialect.
+## Open a database
 
-Starting with v0.2.0 the package uses **native Rcpp C++ bindings** compiled
-against the LadybugDB C library (`liblbug`). The C library is bundled with the
-package — no Python, no `reticulate`, and no extra installation step are
-required.
+Use `":memory:"` for an ephemeral database or a file path for persistence.
+Connections keep their database reachable, but explicit cleanup gives errors a
+predictable scope.
 
-```
-R → Rcpp (rladybugdb.so) → C API (lbug.h) → LadybugDB engine
-```
-
-## Installation
-
-Install from GitHub:
-
-```r
-# install.packages("remotes")
-remotes::install_github("hadimaster65555/rladybugdb")
-```
-
-The `configure` script downloads the prebuilt `liblbug` binary for your
-platform at install time. After that the package is fully self-contained.
-
-Verify the library is working:
-
-```{r version}
-library(rladybugdb)
-ladybugdb_version()      # e.g. "0.15.2"
-ladybugdb_is_installed() # TRUE
-```
-
-> **Note:** `ladybugdb_install()` is deprecated and no longer does anything.
-> You do not need to call it.
-
-## Opening a Database
-
-`lb_database()` opens or creates a LadybugDB database. Pass `":memory:"` for a
-transient in-memory database (ideal for testing and interactive exploration):
-
-```{r open-db}
-library(rladybugdb)
-
-db   <- lb_database(":memory:")
+```{r}
+db <- lb_database(":memory:")
 conn <- lb_connection(db)
-db
-conn
 ```
 
-For a persistent on-disk database pass a directory path:
+For code that should automatically clean up, use a scoped connection:
 
-```r
-db <- lb_database("~/my_graph_db")
+```{r}
+with_lb_connection(":memory:", {
+  ladybugdb_version()
+})
 ```
 
-Use `lb_close()` to release resources when done:
+## Create and query a property graph
 
-```r
-lb_close(conn)
-lb_close(db)
-```
+Node and relationship tables define a graph schema.
 
-## Defining a Schema
+```{r}
+lb_close(lb_execute(
+  conn,
+  "CREATE NODE TABLE Person (name STRING, age INT64, PRIMARY KEY(name))"
+))
+lb_close(lb_execute(
+  conn,
+  "CREATE NODE TABLE City (name STRING, PRIMARY KEY(name))"
+))
+lb_close(lb_execute(
+  conn,
+  "CREATE REL TABLE LivesIn (FROM Person TO City, since INT64)"
+))
 
-LadybugDB uses a **property graph** model: nodes belong to *node tables* and
-edges belong to *relationship tables*. Both are defined with Cypher DDL:
+lb_close(lb_execute(
+  conn,
+  "CREATE (:Person {name: $name, age: $age})",
+  parameters = list(name = "Alice", age = 30L)
+))
+lb_close(lb_execute(conn, "CREATE (:City {name: 'London'})"))
+lb_close(lb_execute(
+  conn,
+  paste(
+    "MATCH (p:Person {name: 'Alice'}), (c:City {name: 'London'})",
+    "CREATE (p)-[:LivesIn {since: 2018}]->(c)"
+  )
+))
 
-```{r schema}
-# Node tables
-lb_execute(conn, "CREATE NODE TABLE Person (
-  name   STRING,
-  age    INT64,
-  PRIMARY KEY (name)
-)")
-
-lb_execute(conn, "CREATE NODE TABLE City (
-  name    STRING,
-  country STRING,
-  PRIMARY KEY (name)
-)")
-
-# Relationship table (directed: Person → City)
-lb_execute(conn, "CREATE REL TABLE LivesIn (FROM Person TO City, since INT64)")
-```
-
-## Inserting Data
-
-### Row-by-row with Cypher `CREATE`
-
-```{r insert}
-lb_execute(conn, "CREATE (:Person {name: 'Alice', age: 30})")
-lb_execute(conn, "CREATE (:Person {name: 'Bob',   age: 25})")
-lb_execute(conn, "CREATE (:City   {name: 'London', country: 'UK'})")
-lb_execute(conn, "CREATE (:City   {name: 'Paris',  country: 'France'})")
-
-lb_execute(conn, "
-  MATCH (p:Person {name: 'Alice'}), (c:City {name: 'London'})
-  CREATE (p)-[:LivesIn {since: 2018}]->(c)
-")
-lb_execute(conn, "
-  MATCH (p:Person {name: 'Bob'}), (c:City {name: 'Paris'})
-  CREATE (p)-[:LivesIn {since: 2021}]->(c)
-")
-```
-
-### Bulk loading from an R data frame
-
-For larger datasets `lb_copy_from_df()` writes the data frame to a temporary
-CSV and uses LadybugDB's `COPY … FROM` loader — much faster than individual
-`CREATE` statements:
-
-```{r bulk-load}
-more_people <- data.frame(
-  name = c("Carol", "Dave"),
-  age  = c(35L,     28L)
+lb_query(
+  conn,
+  paste(
+    "MATCH (p:Person)-[r:LivesIn]->(c:City)",
+    "RETURN p.name AS person, p.age AS age, c.name AS city, r.since AS since"
+  )
 )
-lb_copy_from_df(conn, more_people, "Person")
-
-lb_query(conn, "MATCH (p:Person) RETURN p.name AS name, p.age AS age ORDER BY p.name")
 ```
 
-### Loading from a CSV file
+Parameters must be a named list with unique, non-empty names. Logical,
+integer, double, character, factor, `Date`, `POSIXct`, `integer64`, raw, list,
+array, and struct-like named-list values are supported. Typed missing scalars
+become database `NULL`.
 
-```r
-lb_copy_from_csv(conn, "/data/people.csv", "Person")
+## Reusable and streaming results
+
+`lb_query()` materializes and closes a result automatically. Use
+`lb_execute()` when you want result metadata, conversion to another format, or
+bounded streaming.
+
+```{r}
+result <- lb_execute(
+  conn,
+  "UNWIND range(1, 25) AS id RETURN id, 'row ' + CAST(id AS STRING) AS label"
+)
+
+print(result, n = 3)
+first <- lb_fetch(result, n = 10)
+second <- lb_fetch(result, n = 10)
+lb_result_info(result)
+lb_query_summary(result)
+
+lb_reset(result)
+identical(as.data.frame(result), as.data.frame(result))
+lb_close(result)
 ```
 
-## Querying Data
+Printing, formatting, and `as.data.frame()` preserve the current cursor.
+Successive `lb_fetch()` calls advance it; `lb_reset()` starts again.
 
-### `lb_query()` — query directly to a data frame
+## Arrow and data loading
 
-```{r query-df}
-df <- lb_query(conn,
-  "MATCH (p:Person)-[:LivesIn]->(c:City)
-   RETURN p.name AS person, c.name AS city, c.country AS country
-   ORDER BY p.name")
-df
+With the optional `arrow` package, conversion uses the Arrow C Data Interface
+instead of first creating a data frame.
+
+```{r eval=requireNamespace("arrow", quietly=TRUE)}
+result <- lb_execute(conn, "MATCH (p:Person) RETURN p.name AS name, p.age AS age")
+arrow_table <- as_arrow_table(result)
+lb_close(result)
+arrow_table
 ```
 
-### `lb_execute()` — query to an `lb_result`
+Create a target table before bulk loading. `lb_copy_from_df()` prefers the
+Arrow path, which preserves empty strings and missing strings distinctly, and
+warns if it must use CSV instead.
 
-`lb_result` holds a lazy cursor. Convert it explicitly:
-
-```{r query-execute}
-result <- lb_execute(conn,
-  "MATCH (p:Person) RETURN p.name AS name, p.age AS age ORDER BY p.age")
-result          # prints column schema
-as.data.frame(result)
+```{r eval=requireNamespace("arrow", quietly=TRUE)}
+lb_close(lb_execute(
+  conn,
+  "CREATE NODE TABLE Event (id INT64, note STRING, PRIMARY KEY(id))"
+))
+copy_result <- lb_copy_from_df(
+  conn,
+  data.frame(id = c(1, 2), note = c("", NA_character_)),
+  "Event"
+)
+lb_close(copy_result)
+lb_query(conn, "MATCH (e:Event) RETURN e.* ORDER BY e.id")
 ```
 
-### Parameterised queries
+Use `lb_copy_from_csv()` for explicit file ingestion and
+`lb_copy_from_arrow()` for an Arrow Table or RecordBatch.
 
-Use named parameters (prefixed with `$`) instead of string interpolation.
-This avoids Cypher-injection bugs and handles type coercion automatically:
+## DBI
 
-```{r params}
-lb_execute(conn,
-  "MATCH (p:Person {name: $name}) RETURN p.age AS age",
-  parameters = list(name = "Alice"))
+The DBI backend supports queries, binding, bounded fetches, transactions,
+quoting, and table metadata.
+
+```{r}
+dbi_conn <- DBI::dbConnect(Ladybug(), dbname = ":memory:")
+DBI::dbGetQuery(dbi_conn, "RETURN $value AS value", params = list(value = 42L))
+DBI::dbDisconnect(dbi_conn)
 ```
 
-Supported parameter types: `character`, `integer`, `double`, `logical`.
+## Graph objects
 
-### As a tibble
+Return full nodes and relationships to construct `igraph` or `tidygraph`
+objects. Scalar property projections alone do not contain graph structure.
 
-```{r query-tibble, eval = ladybugdb_is_installed() && requireNamespace("tibble", quietly = TRUE)}
-result <- lb_execute(conn,
-  "MATCH (p:Person) RETURN p.name AS name, p.age AS age ORDER BY p.age")
-tibble::as_tibble(result)
+```{r eval=requireNamespace("igraph", quietly=TRUE)}
+graph_result <- lb_execute(
+  conn,
+  "MATCH (p:Person)-[r:LivesIn]->(c:City) RETURN p, r, c"
+)
+graph <- as_igraph(graph_result)
+lb_close(graph_result)
+graph
 ```
 
-### As an Arrow Table
+Recursive relationship paths are supported as well. Internal identifiers are
+kept as exact character components rather than converted through floating
+point.
 
-```{r query-arrow, eval = ladybugdb_is_installed() && requireNamespace("arrow", quietly = TRUE)}
-result <- lb_execute(conn,
-  "MATCH (p:Person) RETURN p.name AS name, p.age AS age")
-as_arrow_table(result)
-```
+## Close resources
 
-## Graph Analysis
-
-When a query returns full node and relationship columns (i.e. `RETURN p, r, c`
-rather than individual properties), `as_igraph()` and `as_tbl_graph()` convert
-the result into graph objects.
-
-```{r igraph, eval = ladybugdb_is_installed() && requireNamespace("igraph", quietly = TRUE)}
-result <- lb_execute(conn,
-  "MATCH (p:Person)-[r:LivesIn]->(c:City) RETURN p, r, c")
-g <- as_igraph(result)
-print(g)
-```
-
-```{r tidygraph, eval = ladybugdb_is_installed() && requireNamespace("tidygraph", quietly = TRUE)}
-result2 <- lb_execute(conn,
-  "MATCH (p:Person)-[r:LivesIn]->(c:City) RETURN p, r, c")
-tg <- as_tbl_graph(result2)
-tg
-```
-
-## Cleanup
-
-```{r cleanup}
+```{r}
 lb_close(conn)
 lb_close(db)
 ```
 
-## Type Mapping Reference
-
-| LadybugDB type | R type | Notes |
-|---|---|---|
-| `INT8` / `INT16` / `INT32` | `integer` | |
-| `INT64` / `SERIAL` | `double` | Exact up to 2^53; no truncation for graph IDs |
-| `FLOAT` / `DOUBLE` | `double` | |
-| `BOOLEAN` | `logical` | |
-| `STRING` / `UUID` | `character` | |
-| `DATE` | `Date` | Days since Unix epoch |
-| `TIMESTAMP` | `POSIXct` | Microseconds ÷ 1e6 → seconds since epoch |
-| `INTERVAL` / `DECIMAL` / `BLOB` | `character` | Serialised as string |
-| `NULL` | `NA` | Typed NA matching the column type |
-| `LIST` / `ARRAY` | list column | Each cell is an R `list` |
-| `MAP` | `list` with `$keys` / `$values` | |
-| `STRUCT` | named `list` | |
-| `NODE` | named `list` (`_ID`, `_LABEL`, properties) | Use `as_igraph()` to unwrap |
-| `REL` | named `list` (`_SRC`, `_DST`, `_LABEL`, `_ID`, properties) | |
-
-## Real-world example: OpenFlights
-
-`example_openflights.R` (in the package root) shows a complete workflow with
-real data:
-
-1. **Download** OpenFlights airport and route CSVs (~6 000 airports, ~66 000 routes)
-2. **Load** into LadybugDB with `lb_copy_from_df()`
-3. **Query** top hubs, country rankings, and a hub subgraph using Cypher
-4. **Visualise** with `ggplot2`, `ggraph`, and the `maps` package
-
-```r
-# From the package source directory:
-Rscript example_openflights.R
-```
-
-Plots are written to `example_openflights_plots/`.
+Calling `lb_close()` twice is harmless. Closing a connection with a live result
+or a database with a live connection raises a clear error rather than risking
+use-after-free.

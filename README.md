@@ -1,16 +1,17 @@
 # rladybugdb
 
-> R interface to **LadybugDB** — an embedded columnar graph database with Cypher queries.
+> Native R access to LadybugDB, an embedded columnar graph database with
+> Cypher queries.
 
 [![R ≥ 4.1](https://img.shields.io/badge/R-%E2%89%A54.1-276DC3?logo=r)](https://cran.r-project.org)
-[![LadybugDB 0.15.2](https://img.shields.io/badge/LadybugDB-0.15.2-e63946)](https://github.com/LadybugDB/ladybug)
+[![LadybugDB 0.20.4](https://img.shields.io/badge/LadybugDB-0.20.4-e63946)](https://github.com/LadybugDB/ladybug)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-`rladybugdb` provides a native Rcpp binding to the [LadybugDB](https://github.com/LadybugDB/ladybug) C library. **No Python, no reticulate, no runtime setup** — the C library ships with the package and is loaded automatically on `library(rladybugdb)`.
-
-LadybugDB is a fork of [KuzuDB](https://kuzudb.com) and supports the same **openCypher** query dialect.
-
----
+`rladybugdb` binds directly to the
+[LadybugDB](https://github.com/LadybugDB/ladybug) C API through Rcpp. LadybugDB,
+formerly known as Kuzu, runs in the R process: no Python or server is needed.
+The package supports the engine's Cypher query language without claiming
+conformance beyond the behavior tested here.
 
 ## Installation
 
@@ -19,171 +20,211 @@ LadybugDB is a fork of [KuzuDB](https://kuzudb.com) and supports the same **open
 remotes::install_github("hadimaster65555/rladybugdb")
 ```
 
-The prebuilt LadybugDB C library is downloaded automatically during `R CMD INSTALL` via the `configure` script (macOS/Linux) or `configure.win` (Windows). No other setup is needed.
+During installation, the configure script selects the LadybugDB 0.20.4
+artifact for the current operating system and CPU, verifies its published
+SHA-256 checksum, and compiles the package against the matching header. macOS
+and Linux use the upstream static archive; Windows installs the matching DLL.
+OpenSSL 3 is required by the upstream binaries.
 
 ```r
 library(rladybugdb)
-ladybugdb_version()   # "0.15.2"
+ladybugdb_version()
+#> [1] "0.20.4"
 ```
-
----
 
 ## Quick start
 
 ```r
 library(rladybugdb)
 
-# Open an in-memory graph (or pass a directory path for persistence)
-db   <- lb_database(":memory:")
+local({
+db <- lb_database(":memory:") # use a file path for a persisted database
 conn <- lb_connection(db)
+on.exit({
+  lb_close(conn)
+  lb_close(db)
+}, add = TRUE)
 
-# Define schema
-lb_execute(conn, "CREATE NODE TABLE Person (name STRING, age INT64, PRIMARY KEY(name))")
-lb_execute(conn, "CREATE NODE TABLE City   (name STRING, country STRING, PRIMARY KEY(name))")
-lb_execute(conn, "CREATE REL TABLE LivesIn (FROM Person TO City, since INT64)")
+lb_close(lb_execute(
+  conn,
+  "CREATE NODE TABLE Person (name STRING, age INT64, PRIMARY KEY(name))"
+))
+lb_close(lb_execute(
+  conn,
+  "CREATE NODE TABLE City (name STRING, country STRING, PRIMARY KEY(name))"
+))
+lb_close(lb_execute(
+  conn,
+  "CREATE REL TABLE LivesIn (FROM Person TO City, since INT64)"
+))
 
-# Insert data
-lb_execute(conn, "CREATE (:Person {name: 'Alice', age: 30})")
-lb_execute(conn, "CREATE (:City   {name: 'London', country: 'UK'})")
-lb_execute(conn, "MATCH (p:Person {name: 'Alice'}), (c:City {name: 'London'})
-                  CREATE (p)-[:LivesIn {since: 2018}]->(c)")
+lb_close(lb_execute(
+  conn,
+  "CREATE (:Person {name: $name, age: $age})",
+  parameters = list(name = "Alice", age = 30L)
+))
+lb_close(lb_execute(conn, "CREATE (:City {name: 'London', country: 'UK'})"))
+lb_close(lb_execute(
+  conn,
+  paste(
+    "MATCH (p:Person {name: 'Alice'}), (c:City {name: 'London'})",
+    "CREATE (p)-[:LivesIn {since: 2018}]->(c)"
+  )
+))
 
-# Query → data.frame
-lb_query(conn, "MATCH (p:Person)-[:LivesIn]->(c:City)
-                RETURN p.name AS person, c.name AS city, p.age AS age")
+lb_query(
+  conn,
+  paste(
+    "MATCH (p:Person)-[:LivesIn]->(c:City)",
+    "RETURN p.name AS person, c.name AS city, p.age AS age"
+  )
+)
 #>   person   city age
 #> 1  Alice London  30
-
-lb_close(conn)
-lb_close(db)
+})
 ```
 
----
+`with_lb_connection()` is a compact alternative when a connection should be
+scoped to one expression.
 
-## Core API
+## Query results and streaming
 
-### Database and connection
-
-| Function | Description |
-|---|---|
-| `lb_database(path, read_only = FALSE)` | Open or create a database. Use `":memory:"` for an in-memory DB. |
-| `lb_connection(database, num_threads = NULL)` | Open a query connection to the database. |
-| `lb_close(x)` | Close an `lb_connection` or `lb_database` and free C resources. |
-
-### Querying
-
-| Function | Description |
-|---|---|
-| `lb_execute(conn, query, parameters = NULL)` | Run a Cypher query; returns an `lb_result`. |
-| `lb_query(conn, query, parameters = NULL)` | Shortcut: run a query and return a `data.frame` immediately. |
-
-**Parameterised queries** avoid string interpolation and SQL-injection-style bugs:
+`lb_execute()` returns an explicit result object. Materializing or printing it
+does not consume its streaming cursor, and result objects can be closed more
+than once safely.
 
 ```r
-lb_execute(conn,
-  "MATCH (p:Person {name: $name}) RETURN p.age AS age",
-  parameters = list(name = "Alice"))
+result <- lb_execute(conn, "UNWIND range(1, 100000) AS id RETURN id")
+on.exit(lb_close(result), add = TRUE)
+
+print(result, n = 5)          # bounded, non-consuming preview
+first <- lb_fetch(result, 1000)
+second <- lb_fetch(result, 1000)
+lb_reset(result)
+info <- lb_result_info(result)
+timing <- lb_query_summary(result)
 ```
 
-### Bulk loading
+`lb_next_result()` exposes subsequent results from a multi-statement query.
+`lb_set_timeout()` and `lb_interrupt()` control long-running work, while
+`lb_begin()`, `lb_commit()`, and `lb_rollback()` provide transaction control.
 
-| Function | Description |
-|---|---|
-| `lb_copy_from_df(conn, df, table)` | Write an R `data.frame` into a LadybugDB table via CSV. |
-| `lb_copy_from_csv(conn, path, table, header = TRUE, delim = ",")` | Load a CSV file directly using `COPY … FROM`. |
+## Arrow and bulk loading
 
-### Result conversion
+When `arrow` is installed, results move through the Arrow C Data Interface
+without first becoming an R data frame. Fetching can be bounded by batch size.
 
-| Function / method | Description |
-|---|---|
-| `as.data.frame(result)` | Convert `lb_result` → `data.frame`. |
-| `tibble::as_tibble(result)` | Convert `lb_result` → tibble (requires `tibble`). |
-| `as_arrow_table(result)` | Convert `lb_result` → Arrow Table (requires `arrow`). |
+```r
+table <- as_arrow_table(result)
+batch <- lb_fetch_arrow(result, n = 10000)
+```
 
-### Graph analysis
+`lb_copy_from_arrow()` registers an Arrow object as an in-memory LadybugDB
+table and copies it into an existing node table. `lb_copy_from_df()` uses this
+path when Arrow is available and warns before using its lower-fidelity CSV
+fallback. `lb_copy_from_csv()` remains the explicit file-oriented loader.
+Identifiers, file paths, delimiters, and COPY options are validated and quoted.
 
-| Function | Description |
-|---|---|
-| `as_igraph(result)` | Convert a `RETURN node, rel, node` result to an `igraph` object (requires `igraph`). |
-| `as_tbl_graph(result)` | Convert to a `tidygraph::tbl_graph` (requires `tidygraph`). |
+## DBI
 
-### Package info
+The package retains its graph-specific `lb_*` interface and also provides a
+DBI backend.
 
-| Function | Description |
-|---|---|
-| `ladybugdb_version()` | Return the bundled LadybugDB C library version string. |
-| `ladybugdb_is_installed()` | Return `TRUE` if the C library is functional. |
+```r
+local({
+dbi_conn <- DBI::dbConnect(Ladybug(), dbname = ":memory:", bigint = "character")
+on.exit(DBI::dbDisconnect(dbi_conn), add = TRUE)
 
----
+DBI::dbExecute(
+  dbi_conn,
+  "CREATE NODE TABLE Item (id INT64, name STRING, PRIMARY KEY(id))"
+)
+DBI::dbGetQuery(dbi_conn, "RETURN $id AS id", params = list(id = 1L))
+})
+```
+
+DBI table methods operate on LadybugDB node and relationship tables. Graph
+schema and traversal remain available directly through Cypher. This is a
+Cypher backend, so SQL `SELECT` strings and relational `dbWriteTable()` /
+`dbAppendTable()` assumptions do not apply; create graph tables with Cypher and
+load them with the `lb_copy_*()` functions. LadybugDB does not currently expose
+a stable affected-row count through its C result summary, so `dbExecute()`
+returns `0` after successful DDL/DML. The compatible DBI driver contract is
+covered by a focused DBItest subset.
 
 ## Type mapping
 
-| LadybugDB type | R type | Notes |
-|---|---|---|
-| INT8 / INT16 / INT32 | `integer` | |
-| INT64 / SERIAL | `double` | Preserves values up to 2^53 exactly |
-| FLOAT / DOUBLE | `double` | |
-| BOOLEAN | `logical` | |
-| STRING / UUID | `character` | |
-| DATE | `Date` | Days since Unix epoch |
-| TIMESTAMP | `POSIXct` | Microseconds ÷ 1e6 → seconds since epoch |
-| INTERVAL / DECIMAL / BLOB | `character` | Serialised via `lbug_value_to_string` |
-| NULL | `NA` | Typed NA matching the column type |
-| LIST / ARRAY | `list` column | Each cell is an R `list` |
-| MAP | `list` with `$keys` / `$values` | |
-| STRUCT | named `list` | |
-| NODE | named `list` with `_ID`, `_LABEL`, properties | Pass full query through `as_igraph()` |
-| REL | named `list` with `_SRC`, `_DST`, `_LABEL`, `_ID`, properties | |
-
----
-
-## Visualisation example
-
-`example_openflights.R` demonstrates a full real-data workflow:
-
-1. Downloads the [OpenFlights](https://openflights.org/data) dataset (~6,000 airports, ~66,000 routes)
-2. Loads it into a LadybugDB graph with `lb_copy_from_df()`
-3. Runs several Cypher aggregation queries
-4. Produces four plots with `ggplot2`, `ggraph`, and the `maps` package
-
-```
-Rscript example_openflights.R
-```
-
-Sample output:
-
-| Plot | Description |
+| LadybugDB type | Default R representation |
 |---|---|
-| `01_top_hubs.png` | Bar chart — top 30 airports by outbound route count |
-| `02_airports_by_country.png` | Lollipop chart — top 20 countries by airport count |
-| `03_world_map.png` | Dark-background world map with sampled routes and hub markers |
-| `04_fra_network.png` | Directed network graph of Frankfurt's direct destinations |
+| BOOL | `logical` |
+| INT8 / INT16 / INT32 | `integer` |
+| INT64 / SERIAL | `double` |
+| UINT32 / FLOAT / DOUBLE | `double` |
+| INT128 / DECIMAL | exact `character` |
+| STRING / UUID / JSON | `character` |
+| DATE | `Date` |
+| TIMESTAMP variants | `POSIXct` in UTC |
+| BLOB | a `raw` vector in a list column |
+| INTERVAL | structured `lb_interval` value |
+| LIST / ARRAY | list column |
+| MAP / STRUCT / UNION | structured list value |
+| NODE / REL / RECURSIVE_REL | structured graph value |
+| NULL | type-appropriate `NA` or `NULL` in a list column |
 
----
+Set `options(rladybugdb.bigint = "character")` for exact character INT64 and
+UINT64 results, or use `"integer64"` with the optional `bit64` package for
+signed INT64. UINT64 remains character in `integer64` mode because `bit64` has
+no unsigned representation. The default `"double"` mode is convenient but is
+only exact through 2^53.
 
-## Build from source / offline install
+R parameters support logical, integer, double, character, factors, `Date`,
+`POSIXct`, `bit64::integer64`, raw bytes, lists, and named lists. Every typed R
+missing scalar binds as database `NULL`. Raw values use LadybugDB's documented
+STRING-to-BLOB cast, so use them in a BLOB-typed context or `CAST($value AS
+BLOB)`.
 
-To pre-populate `src/vendor/` and `inst/libs/` before `R CMD build` (e.g. for
-CRAN or air-gapped builds):
+## Graph conversion and extensions
+
+`as_igraph()` and `as_tbl_graph()` convert returned NODE, REL, and recursive
+path values while preserving labels, properties, isolated nodes, and exact
+internal identifiers.
+
+Extension helpers are deliberately thin wrappers:
 
 ```r
-Rscript tools/vendor.R   # downloads liblbug for the current platform
-R CMD build .
-R CMD INSTALL rladybugdb_0.2.0.tar.gz
+lb_list_extensions(conn)
+install_result <- lb_install_extension(conn, "algo")
+lb_close(install_result)
+load_result <- lb_load_extension(conn, "algo")
+lb_close(load_result)
 ```
 
-The pinned library version is in `tools/lbug_version`.
+See `vignette("extensions", package = "rladybugdb")` for PageRank, Louvain,
+BM25 full-text search, HNSW vector search, and data interoperability examples.
 
----
+## Stored databases and offline builds
 
-## Contributing
+LadybugDB 0.20.4 reads the storage format written by the previously bundled
+0.15.x engine; this is covered by a committed compatibility fixture. Back up a
+database before opening it with a new engine. See
+`vignette("storage-migration", package = "rladybugdb")` for migration and
+recovery steps.
 
-Bug reports and pull requests are welcome at
-<https://github.com/hadimaster65555/rladybugdb/issues>.
+For an offline build, pre-populate the platform artifacts while network access
+is available, then build and install from the resulting source tree:
 
----
+```r
+Rscript tools/vendor.R
+R CMD INSTALL .
+```
+
+The pinned version is stored in `tools/lbug_version`; checksums are in
+`tools/lbug_checksums`. A clean source archive excludes downloaded and compiled
+artifacts and retrieves the verified platform artifact during installation.
+
+Runnable package examples are installed under `inst/examples`.
 
 ## License
 
-MIT © rladybugdb authors. LadybugDB C library is distributed under the
+MIT © rladybugdb authors. LadybugDB is distributed under its
 [MIT License](https://github.com/LadybugDB/ladybug/blob/main/LICENSE).

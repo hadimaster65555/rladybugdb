@@ -1,0 +1,15 @@
+^\.mcp\.json$
+^\.DS_Store$
+^\.github$
+^PLAN\.md$
+^docs$
+^pkgdown$
+^_pkgdown\.yml$
+^example.*\.R$
+^example_openflights_plots$
+^viz_.*\.(png|html)$
+^src/.*\.(a|o|so|dll|dylib)$
+^src/vendor$
+^src/Makevars$
+^vignettes/.*\.pdf$
+^rladybugdb.*$

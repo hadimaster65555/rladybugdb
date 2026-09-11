@@ -1,110 +1,98 @@
 #!/bin/sh
-# configure — downloads the prebuilt LadybugDB C library from LadybugDB/ladybug releases.
-# Called automatically by R CMD INSTALL.
+# Download and verify the pinned LadybugDB C library for this platform.
 
-set -e
+set -eu
 
-LBUG_VERSION=$(cat tools/lbug_version | tr -d '[:space:]')
-ARCH=$(uname -m)   # arm64, x86_64, aarch64
-OS=$(uname -s)     # Darwin, Linux
+LBUG_VERSION=$(tr -d '[:space:]' < tools/lbug_version)
+ARCH=$(uname -m)
+OS=$(uname -s)
 
-VENDOR_INC="$(pwd)/src/vendor/include"
-INST_LIBS="$(pwd)/inst/libs"
-
-mkdir -p "$VENDOR_INC" "$INST_LIBS"
-
-# ── Detect platform and set artifact name ─────────────────────────────────
-case "$OS" in
-  Darwin)
-    ARTIFACT="liblbug-osx-universal.tar.gz"
-    LIB_EXT=".dylib"
-    RPATH_FLAG="-Wl,-rpath,@loader_path"
+case "${OS}-${ARCH}" in
+  Darwin-arm64|Darwin-aarch64)
+    ARTIFACT="liblbug-static-osx-arm64.tar.gz"
     ;;
-  Linux)
-    case "$ARCH" in
-      x86_64)  ARTIFACT="liblbug-linux-x86_64.tar.gz" ;;
-      aarch64) ARTIFACT="liblbug-linux-aarch64.tar.gz" ;;
-      *)
-        echo "configure: Unsupported Linux arch: $ARCH"; exit 1 ;;
-    esac
-    LIB_EXT=".so"
-    RPATH_FLAG="-Wl,-rpath,\\\$\\\$ORIGIN"
+  Darwin-x86_64)
+    ARTIFACT="liblbug-static-osx-x86_64.tar.gz"
+    ;;
+  Linux-x86_64|Linux-amd64)
+    ARTIFACT="liblbug-static-linux-x86_64-compat.tar.gz"
+    ;;
+  Linux-aarch64|Linux-arm64)
+    ARTIFACT="liblbug-static-linux-aarch64-compat.tar.gz"
     ;;
   *)
-    echo "configure: Unsupported OS: $OS"; exit 1 ;;
+    echo "configure: ERROR: unsupported platform ${OS}-${ARCH}." >&2
+    exit 1
+    ;;
 esac
 
-LBUG_LIB="$INST_LIBS/liblbug${LIB_EXT}"
+EXPECTED_SHA=$(awk -v artifact="$ARTIFACT" '$1 == artifact { print $2 }' tools/lbug_checksums)
+if [ -z "$EXPECTED_SHA" ]; then
+  echo "configure: ERROR: no SHA-256 recorded for ${ARTIFACT}." >&2
+  exit 1
+fi
 
-# ── Skip download if already vendored ────────────────────────────────────
-if [ -f "$VENDOR_INC/lbug.h" ] && [ -f "$LBUG_LIB" ]; then
-  echo "configure: pre-vendored liblbug found — skipping download."
+VENDOR_INC="$(pwd)/src/vendor/include"
+VENDOR_LIB="$(pwd)/src/vendor/lib"
+LBUG_HEADER="${VENDOR_INC}/lbug.h"
+LBUG_LIB="${VENDOR_LIB}/liblbug.a"
+VERSION_MARKER="${VENDOR_LIB}/ladybugdb-version"
+mkdir -p "$VENDOR_INC" "$VENDOR_LIB"
+
+VENDORED_VERSION=""
+if [ -f "$VERSION_MARKER" ]; then
+  VENDORED_VERSION=$(tr -d '[:space:]' < "$VERSION_MARKER")
+fi
+
+if [ -f "$LBUG_HEADER" ] && [ -f "$LBUG_LIB" ] && [ "$VENDORED_VERSION" = "$LBUG_VERSION" ]; then
+  echo "configure: using LadybugDB v${LBUG_VERSION} artifacts already in src/vendor."
 else
   URL="https://github.com/LadybugDB/ladybug/releases/download/v${LBUG_VERSION}/${ARTIFACT}"
-  echo "configure: downloading LadybugDB v${LBUG_VERSION} for ${OS}-${ARCH}..."
-  echo "configure: URL = ${URL}"
+  DOWNLOAD_DIR=$(mktemp -d)
+  trap 'rm -rf "$DOWNLOAD_DIR"' EXIT HUP INT TERM
+  ARCHIVE="${DOWNLOAD_DIR}/${ARTIFACT}"
 
-  TMPDIR_DL=$(mktemp -d)
-  trap 'rm -rf "$TMPDIR_DL"' EXIT
+  echo "configure: downloading ${URL}"
+  curl -fL --retry 3 --connect-timeout 30 --max-time 600 "$URL" -o "$ARCHIVE"
 
-  if ! curl -fsSL --max-time 300 "$URL" -o "$TMPDIR_DL/liblbug.tar.gz"; then
-    echo "configure: ERROR — download failed."
-    echo "  Tried: $URL"
-    echo "  Check your internet connection or set LBUG_VERSION in tools/lbug_version."
+  if command -v shasum >/dev/null 2>&1; then
+    ACTUAL_SHA=$(shasum -a 256 "$ARCHIVE" | awk '{ print $1 }')
+  elif command -v sha256sum >/dev/null 2>&1; then
+    ACTUAL_SHA=$(sha256sum "$ARCHIVE" | awk '{ print $1 }')
+  else
+    echo "configure: ERROR: shasum or sha256sum is required to verify LadybugDB." >&2
+    exit 1
+  fi
+  if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
+    echo "configure: ERROR: SHA-256 mismatch for ${ARTIFACT}." >&2
+    echo "configure: expected ${EXPECTED_SHA}, got ${ACTUAL_SHA}." >&2
     exit 1
   fi
 
-  tar -xzf "$TMPDIR_DL/liblbug.tar.gz" -C "$TMPDIR_DL/"
-
-  # Copy header
-  HDR=$(find "$TMPDIR_DL" -name "lbug.h" 2>/dev/null | head -1)
-  if [ -z "$HDR" ]; then
-    echo "configure: ERROR — lbug.h not found in archive."; exit 1
-  fi
-  cp "$HDR" "$VENDOR_INC/lbug.h"
-
-  # Copy shared library
-  if [ "$OS" = "Darwin" ]; then
-    LIB=$(find "$TMPDIR_DL" -name "liblbug.dylib" 2>/dev/null | head -1)
-  else
-    LIB=$(find "$TMPDIR_DL" \( -name "liblbug.so" -o -name "liblbug.so.*" \) 2>/dev/null | head -1)
-  fi
-  if [ -z "$LIB" ]; then
-    echo "configure: ERROR — shared library not found in archive."; exit 1
-  fi
-  cp "$LIB" "$LBUG_LIB"
-
-  # ── macOS: fix install name so the dylib can be found via @rpath ─────
-  # The downloaded dylib has install name @rpath/liblbug.0.dylib (versioned).
-  # We rename it to @rpath/liblbug.dylib to match the filename we ship.
-  if [ "$OS" = "Darwin" ] && command -v install_name_tool >/dev/null 2>&1; then
-    install_name_tool -id "@rpath/liblbug.dylib" "$LBUG_LIB" 2>/dev/null || true
-    echo "configure: fixed dylib install name to @rpath/liblbug.dylib"
+  tar -xzf "$ARCHIVE" -C "$DOWNLOAD_DIR"
+  HEADER_SOURCE=$(find "$DOWNLOAD_DIR" -name lbug.h | head -n 1)
+  LIB_SOURCE=$(find "$DOWNLOAD_DIR" -name liblbug.a | head -n 1)
+  if [ -z "$HEADER_SOURCE" ] || [ -z "$LIB_SOURCE" ]; then
+    echo "configure: ERROR: ${ARTIFACT} did not contain lbug.h and liblbug.a." >&2
+    exit 1
   fi
 
-  echo "configure: installed lbug.h and liblbug${LIB_EXT}."
+  cp "$HEADER_SOURCE" "$LBUG_HEADER"
+  cp "$LIB_SOURCE" "$LBUG_LIB"
+  printf '%s\n' "$LBUG_VERSION" > "$VERSION_MARKER"
+
+  echo "configure: verified and installed LadybugDB v${LBUG_VERSION}."
 fi
 
-# ── macOS: thin universal dylib to the active architecture ───────────────
-# R's staged-install path check misreads multi-arch `otool -l` output and
-# treats the extra architecture header as a hard-coded temporary path.
-if [ "$OS" = "Darwin" ] && command -v lipo >/dev/null 2>&1; then
-  THIN_LIB="${LBUG_LIB}.thin"
-  if lipo -thin "$ARCH" "$LBUG_LIB" -output "$THIN_LIB" 2>/dev/null; then
-    mv "$THIN_LIB" "$LBUG_LIB"
-    echo "configure: thinned dylib to ${ARCH}"
-  else
-    rm -f "$THIN_LIB"
-  fi
+if command -v pkg-config >/dev/null 2>&1 && pkg-config --exists openssl; then
+  OPENSSL_LIBS=$(pkg-config --libs openssl)
+else
+  OPENSSL_LIBS='-lssl -lcrypto'
 fi
 
-# ── Generate src/Makevars ────────────────────────────────────────────────
-sed "s|@VENDOR_INC@|${VENDOR_INC}|g;
-     s|@INST_LIBS@|${INST_LIBS}|g;
-     s|@LIB_EXT@|${LIB_EXT}|g;
-     s|@RPATH_FLAG@|${RPATH_FLAG}|g" \
+sed -e "s|@VENDOR_INC@|${VENDOR_INC}|g" \
+    -e "s|@LBUG_LIB@|${LBUG_LIB}|g" \
+    -e "s|@OPENSSL_LIBS@|${OPENSSL_LIBS}|g" \
     src/Makevars.in > src/Makevars
 
-echo "configure: src/Makevars written."
-echo "  CPPFLAGS : -I\"${VENDOR_INC}\""
-echo "  LIBS     : \"${LBUG_LIB}\" ${RPATH_FLAG}"
+echo "configure: wrote src/Makevars for ${OS}-${ARCH}."

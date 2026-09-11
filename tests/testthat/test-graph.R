@@ -52,3 +52,55 @@ test_that("as_tbl_graph.lb_result() builds tbl_graph from node/rel columns", {
   tg <- as_tbl_graph(result)
   expect_s3_class(tg, "tbl_graph")
 })
+
+test_that("empty structural results produce an empty graph", {
+  skip_if_not_installed("igraph")
+  conn <- make_test_conn()
+  lb_close(lb_execute(conn, "CREATE NODE TABLE EmptyNode (id INT64, PRIMARY KEY(id))"))
+  result <- lb_execute(conn, "MATCH (n:EmptyNode) RETURN n")
+  on.exit(lb_close(result))
+  graph <- as_igraph(result)
+  expect_equal(igraph::vcount(graph), 0L)
+  expect_equal(igraph::ecount(graph), 0L)
+})
+
+test_that("graph conversion preserves labels, isolated nodes, and self-loops", {
+  skip_if_not_installed("igraph")
+  conn <- make_test_conn()
+  lb_close(lb_execute(conn, "CREATE NODE TABLE Person2 (id INT64, PRIMARY KEY(id))"))
+  lb_close(lb_execute(conn, "CREATE NODE TABLE Place2 (id INT64, PRIMARY KEY(id))"))
+  lb_close(lb_execute(conn, "CREATE REL TABLE Knows2 (FROM Person2 TO Person2)"))
+  lb_close(lb_execute(conn, "CREATE REL TABLE Visits2 (FROM Person2 TO Place2)"))
+  lb_close(lb_execute(conn, "CREATE (:Person2 {id: 1}), (:Person2 {id: 2}), (:Place2 {id: 3})"))
+  lb_close(lb_execute(
+    conn,
+    paste(
+      "MATCH (a:Person2 {id: 1}), (b:Place2 {id: 3})",
+      "CREATE (a)-[:Knows2]->(a), (a)-[:Visits2]->(b)"
+    )
+  ))
+
+  result <- lb_execute(
+    conn,
+    paste(
+      "MATCH (a:Person2)-[r:Knows2]->(b:Person2) RETURN a, r, b",
+      "UNION ALL",
+      "MATCH (a:Person2)-[r:Visits2]->(b:Place2) RETURN a, r, b",
+      "UNION ALL",
+      "MATCH (a:Person2)-[r:Visits2]->(b:Place2) RETURN a, r, b"
+    )
+  )
+  on.exit(lb_close(result))
+  graph <- as_igraph(result)
+
+  expect_equal(igraph::vcount(graph), 2L)
+  expect_equal(igraph::ecount(graph), 2L)
+  expect_setequal(igraph::vertex_attr(graph, "_LABEL"), c("Person2", "Place2"))
+  expect_setequal(igraph::edge_attr(graph, "_LABEL"), c("Knows2", "Visits2"))
+  expect_true(any(igraph::as_edgelist(graph)[, 1] == igraph::as_edgelist(graph)[, 2]))
+
+  isolated <- lb_execute(conn, "MATCH (n) RETURN n")
+  on.exit(lb_close(isolated), add = TRUE)
+  isolated_graph <- as_igraph(isolated)
+  expect_equal(igraph::vcount(isolated_graph), 3L)
+})

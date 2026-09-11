@@ -19,12 +19,9 @@ This article walks through a complete, real-world graph-analysis workflow using
 the [OpenFlights](https://openflights.org/data) dataset: ~7 700 airports and
 ~67 000 airline routes loaded into an in-memory LadybugDB graph.
 
-The full script is at `example_openflights.R` in the package source. The code
-blocks below are shown for reference (`eval = FALSE`) and can be run with:
-
-```r
-Rscript example_openflights.R
-```
+The code blocks below are shown for reference (`eval = FALSE`). Copy the
+article source from `system.file("doc", "openflights-analysis.Rmd",
+package = "rladybugdb")` to adapt the complete workflow.
 
 ---
 
@@ -126,8 +123,8 @@ lb_execute(conn, "
   )")
 ```
 
-`lb_copy_from_df()` uses LadybugDB's native bulk loader, which is orders of
-magnitude faster than row-by-row `CREATE` statements:
+`lb_copy_from_df()` uses Arrow-backed loading when Arrow is installed, with an
+explicitly warned CSV fallback:
 
 ```{r load}
 lb_copy_from_df(conn, airports, "Airport")

@@ -4,7 +4,7 @@
 \alias{.build_igraph}
 \title{Build an igraph from a data frame with node/rel list-columns}
 \usage{
-.build_igraph(df)
+.build_igraph(df, column_types = NULL)
 }
 \description{
 Heuristic: columns whose values are named lists containing \verb{_id} /

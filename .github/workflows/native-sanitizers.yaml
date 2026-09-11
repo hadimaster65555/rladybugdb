@@ -1,0 +1,55 @@
+name: Native sanitizers
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  asan-ubsan:
+    runs-on: ubuntu-latest
+    env:
+      CC: clang
+      CXX: clang++
+      CXX17: clang++
+      R_KEEP_PKG_SOURCE: yes
+      _R_CHECK_CRAN_INCOMING_REMOTE_: false
+      UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+      ASAN_OPTIONS: detect_leaks=0:halt_on_error=1
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y clang libssl-dev
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: release
+          use-public-rspm: true
+
+      - uses: r-lib/actions/setup-pandoc@v2
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::rcmdcheck
+          needs: check
+
+      - name: Configure sanitizer flags
+        shell: bash
+        run: |
+          mkdir -p ~/.R
+          printf '%s\n' \
+            'CXX17FLAGS=-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer' \
+            'LDFLAGS=-fsanitize=address,undefined' >> ~/.R/Makevars
+          echo "LD_PRELOAD=$(clang -print-file-name=libclang_rt.asan-x86_64.so)" >> "$GITHUB_ENV"
+
+      - name: Build and run tests under ASan/UBSan
+        shell: bash
+        run: |
+          R CMD build --no-manual --no-build-vignettes .
+          R CMD check --no-manual --no-build-vignettes rladybugdb_*.tar.gz

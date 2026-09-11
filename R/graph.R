@@ -38,7 +38,7 @@ as_igraph.lb_result <- function(x, ...) {
   }
 
   df <- as.data.frame(x)
-  .build_igraph(df)
+  .build_igraph(df, x$col_types)
 }
 
 #' Convert an lb_result to a tbl_graph (tidygraph)
@@ -76,21 +76,56 @@ as_tbl_graph.lb_result <- function(x, ...) {
 #' are REL columns.
 #'
 #' @keywords internal
-.build_igraph <- function(df) {
+.build_igraph <- function(df, column_types = NULL) {
   nodes_list <- list()
   edges_list <- list()
 
-  for (col in names(df)) {
+  for (column_index in seq_along(df)) {
+    col <- names(df)[[column_index]]
     vals <- df[[col]]
     if (!is.list(vals)) next
 
-    first <- vals[[1L]]
-    if (is.null(first)) next
+    declared_type <- if (length(column_types) >= column_index) {
+      column_types[[column_index]]
+    } else {
+      NA_character_
+    }
+    if (!length(vals)) {
+      if (identical(declared_type, "NODE")) {
+        nodes_list[[col]] <- data.frame(`_ID` = character(), check.names = FALSE)
+      } else if (declared_type %in% c("REL", "RELATIONSHIP")) {
+        edges_list[[col]] <- data.frame(from = character(), to = character(),
+                                        check.names = FALSE)
+      } else if (identical(declared_type, "RECURSIVE_REL")) {
+        nodes_list[[paste0(col, "_nodes")]] <-
+          data.frame(`_ID` = character(), check.names = FALSE)
+        edges_list[[paste0(col, "_relationships")]] <-
+          data.frame(from = character(), to = character(), check.names = FALSE)
+      }
+      next
+    }
+    present <- which(!vapply(vals, is.null, logical(1)))
+    if (!length(present)) {
+      if (identical(declared_type, "NODE")) {
+        nodes_list[[col]] <- data.frame(`_ID` = character(), check.names = FALSE)
+      } else if (declared_type %in% c("REL", "RELATIONSHIP")) {
+        edges_list[[col]] <- data.frame(from = character(), to = character(),
+                                        check.names = FALSE)
+      }
+      next
+    }
+    first <- vals[[present[[1L]]]]
 
     if (.is_node_val(first)) {
       nodes_list[[col]] <- .extract_nodes(vals, col)
     } else if (.is_rel_val(first)) {
       edges_list[[col]] <- .extract_rels(vals, col)
+    } else if (inherits(first, "lb_path") ||
+               all(c("nodes", "relationships") %in% names(first))) {
+      path_nodes <- unlist(lapply(vals, function(v) v[["nodes"]]), recursive = FALSE)
+      path_rels <- unlist(lapply(vals, function(v) v[["relationships"]]), recursive = FALSE)
+      nodes_list[[paste0(col, "_nodes")]] <- .extract_nodes(path_nodes, col)
+      edges_list[[paste0(col, "_relationships")]] <- .extract_rels(path_rels, col)
     }
   }
 
@@ -114,9 +149,17 @@ as_tbl_graph.lb_result <- function(x, ...) {
 
   if (length(edges_list) > 0L) {
     all_edges <- .rbind_fill(edges_list)
+    if ("_ID" %in% names(all_edges)) {
+      all_edges <- all_edges[!duplicated(all_edges[["_ID"]]), , drop = FALSE]
+    }
   } else {
     all_edges <- data.frame(from = character(0), to = character(0),
                             check.names = FALSE)
+  }
+
+  if (!nrow(all_nodes) && nrow(all_edges)) {
+    ids <- unique(c(all_edges$from, all_edges$to))
+    all_nodes <- data.frame(`_ID` = ids, check.names = FALSE)
   }
 
   igraph::graph_from_data_frame(
@@ -139,6 +182,8 @@ as_tbl_graph.lb_result <- function(x, ...) {
 }
 
 .extract_nodes <- function(vals, col_name) {
+  vals <- Filter(Negate(is.null), vals)
+  if (!length(vals)) return(data.frame(`_ID` = character(), check.names = FALSE))
   rows <- lapply(vals, function(v) {
     # Properties are all keys that don't start with "_"
     prop_keys <- names(v)[!startsWith(names(v), "_")]
@@ -149,12 +194,17 @@ as_tbl_graph.lb_result <- function(x, ...) {
 }
 
 .extract_rels <- function(vals, col_name) {
+  vals <- Filter(Negate(is.null), vals)
+  if (!length(vals)) {
+    return(data.frame(from = character(), to = character(), check.names = FALSE))
+  }
   rows <- lapply(vals, function(v) {
     prop_keys <- names(v)[!startsWith(names(v), "_")]
     props <- v[prop_keys]
     c(list(from     = .node_id_from_ref(v[["_SRC"]]),
            to       = .node_id_from_ref(v[["_DST"]]),
-           `_LABEL` = v[["_LABEL"]]), props)
+           `_LABEL` = v[["_LABEL"]],
+           `_ID`    = .node_id_from_ref(v[["_ID"]])), props)
   })
   .rows_to_df(rows)
 }
@@ -178,7 +228,10 @@ as_tbl_graph.lb_result <- function(x, ...) {
 
 # rbind a list of data frames that may have different columns (fills with NA)
 .rbind_fill <- function(dfs) {
+  dfs <- Filter(is.data.frame, dfs)
+  if (!length(dfs)) return(data.frame())
   all_cols <- unique(unlist(lapply(dfs, names)))
+  if (!length(all_cols)) return(data.frame())
   dfs_aligned <- lapply(dfs, function(df) {
     missing <- setdiff(all_cols, names(df))
     for (col in missing) df[[col]] <- NA
@@ -189,18 +242,16 @@ as_tbl_graph.lb_result <- function(x, ...) {
 
 #' @importFrom stats setNames
 .rows_to_df <- function(rows) {
+  if (!length(rows)) return(data.frame())
   all_keys <- unique(unlist(lapply(rows, names)))
-  out <- lapply(rows, function(r) {
-    lapply(all_keys, function(k) {
-      v <- r[[k]]
-      if (is.null(v)) NA else v
+  columns <- setNames(vector("list", length(all_keys)), all_keys)
+  for (key in all_keys) {
+    values <- lapply(rows, function(row) {
+      value <- row[[key]]
+      if (is.null(value)) NA else value
     })
-  })
-  df <- as.data.frame(
-    do.call(rbind, lapply(out, function(r) {
-      setNames(as.data.frame(r, stringsAsFactors = FALSE), all_keys)
-    })),
-    stringsAsFactors = FALSE
-  )
-  df
+    scalar <- vapply(values, function(value) length(value) == 1L && !is.list(value), logical(1))
+    columns[[key]] <- if (all(scalar)) unlist(values, recursive = FALSE) else I(values)
+  }
+  as.data.frame(columns, stringsAsFactors = FALSE, check.names = FALSE)
 }

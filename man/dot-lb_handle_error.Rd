@@ -2,7 +2,7 @@
 % Please edit documentation in R/utils.R
 \name{.lb_handle_error}
 \alias{.lb_handle_error}
-\title{Handle Python exceptions from LadybugDB}
+\title{Handle C++ exceptions from LadybugDB}
 \usage{
 .lb_handle_error(expr)
 }
@@ -10,7 +10,7 @@
 \item{expr}{Expression to evaluate.}
 }
 \description{
-Wraps a call expression, catches any condition, and re-throws as a typed
-R error with the Python traceback attached.
+Wraps a call expression, catches any condition thrown by the Rcpp layer,
+and re-throws as a typed R error with class \code{rladybugdb_error_query}.
 }
 \keyword{internal}

@@ -57,3 +57,26 @@ test_that("as_arrow_table.lb_result() returns an Arrow Table", {
   expect_true(inherits(at, "ArrowTabular") || inherits(at, "Table"))
   expect_equal(nrow(at), 1L)
 })
+
+test_that("Arrow fetches are bounded and full conversion preserves the cursor", {
+  skip_if_not_installed("arrow")
+  conn <- make_test_conn()
+  result <- lb_execute(conn, "UNWIND range(1, 25) AS x RETURN x ORDER BY x")
+  on.exit(lb_close(result))
+
+  first <- lb_fetch_arrow(result, 10)
+  expect_equal(nrow(first), 10L)
+  expect_equal(as.data.frame(first)$x, 1:10)
+  expect_equal(lb_result_info(result)$rows_fetched, 10)
+
+  all_rows <- as_arrow_table(result)
+  expect_equal(nrow(all_rows), 25L)
+  expect_equal(lb_result_info(result)$rows_fetched, 10)
+
+  second <- lb_fetch_arrow(result, 10)
+  final <- lb_fetch_arrow(result, 10)
+  expect_equal(as.data.frame(second)$x, 11:20)
+  expect_equal(as.data.frame(final)$x, 21:25)
+  rm(first, all_rows, second, final)
+  gc()
+})

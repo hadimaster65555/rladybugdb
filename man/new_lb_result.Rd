@@ -4,20 +4,22 @@
 \alias{new_lb_result}
 \title{LadybugDB query result}
 \usage{
-new_lb_result(py_result, query = NULL)
+new_lb_result(ptr, conn = NULL, query = NULL, parent = NULL)
 }
 \arguments{
-\item{py_result}{A Python \code{QueryResult} object returned by
-\code{Connection$execute()}.}
+\item{ptr}{Native result pointer.}
 
-\item{query}{The Cypher query string (stored for informational purposes).}
+\item{conn}{Owning \code{lb_connection}.}
+
+\item{query}{Original query text.}
+
+\item{parent}{Parent result for a multi-statement query, if any.}
 }
 \value{
-An object of class \code{lb_result}.
+An \code{lb_result}.
 }
 \description{
-\code{lb_result} is an S3 class wrapping a LadybugDB \code{QueryResult} Python object.
-Use \code{\link[=as.data.frame]{as.data.frame()}}, \link[tibble:as_tibble]{as_tibble()}, or
-\code{\link[=as_arrow_table]{as_arrow_table()}} to extract results.
+A native query result with an independent, resettable cursor. Results keep
+their connection and database reachable until \code{\link[=lb_close]{lb_close()}} is called.
 }
 \keyword{internal}

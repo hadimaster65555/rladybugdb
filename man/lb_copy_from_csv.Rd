@@ -4,30 +4,25 @@
 \alias{lb_copy_from_csv}
 \title{Load a CSV file into a LadybugDB table}
 \usage{
-lb_copy_from_csv(conn, path, table, header = TRUE, delim = ",")
+lb_copy_from_csv(conn, path, table, header = TRUE, delim = ",", ...)
 }
 \arguments{
-\item{conn}{An \code{lb_connection} object.}
+\item{conn}{An \code{lb_connection}.}
 
-\item{path}{Character. Absolute path to a CSV file. The file must be
-accessible from the process running LadybugDB.}
+\item{path}{Path to a CSV file.}
 
-\item{table}{Character. The name of the target node or relationship table.}
+\item{table}{Existing target table name.}
 
-\item{header}{Logical. Does the CSV file have a header row? Default \code{TRUE}.}
+\item{header}{Does the file contain a header?}
 
-\item{delim}{Character. Field delimiter. Default \code{","}.}
+\item{delim}{One-character delimiter.}
+
+\item{...}{Named COPY options. Values must be scalar logical, numeric, or
+character values; option names are validated identifiers.}
 }
 \value{
-An \code{lb_result} (the result of the COPY statement).
+An \code{lb_result}.
 }
 \description{
-Executes \verb{COPY <table> FROM '<path>'} using LadybugDB's built-in CSV loader.
-The table must already exist.
-}
-\examples{
-\dontrun{
-lb_copy_from_csv(conn, "/data/people.csv", "Person")
-}
-
+Load a CSV file into a LadybugDB table
 }

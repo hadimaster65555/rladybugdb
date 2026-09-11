@@ -42,7 +42,7 @@ ladybugdb_is_installed <- function() {
 
 #' Return the LadybugDB C library version string
 #'
-#' @return A character string, e.g. `"0.7.0"`.
+#' @return A character string, e.g. `"0.20.4"`.
 #'
 #' @examples
 #' ladybugdb_version()

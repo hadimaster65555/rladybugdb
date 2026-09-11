@@ -7,21 +7,13 @@
 lb_connection(database, num_threads = NULL)
 }
 \arguments{
-\item{database}{An \code{lb_database} object created by \code{\link[=lb_database]{lb_database()}}.}
+\item{database}{An \code{lb_database} object.}
 
-\item{num_threads}{Integer. Number of threads LadybugDB may use. \code{NULL}
-leaves the default (typically all available cores).}
+\item{num_threads}{Positive integer execution thread limit, or \code{NULL}.}
 }
 \value{
-An object of class \code{lb_connection}.
+An \code{lb_connection} object.
 }
 \description{
 Open a connection to a LadybugDB database
-}
-\examples{
-\dontrun{
-db   <- lb_database(":memory:")
-conn <- lb_connection(db)
-}
-
 }

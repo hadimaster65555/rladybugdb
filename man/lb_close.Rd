@@ -2,28 +2,20 @@
 % Please edit documentation in R/connection.R
 \name{lb_close}
 \alias{lb_close}
-\title{Close a LadybugDB connection or database}
+\title{Close a LadybugDB result, connection, or database}
 \usage{
 lb_close(x, ...)
 }
 \arguments{
-\item{x}{An \code{lb_connection} or \code{lb_database} object.}
+\item{x}{An \code{lb_result}, \code{lb_connection}, or \code{lb_database}.}
 
-\item{...}{Unused; included for S3 generics compatibility.}
+\item{...}{Unused.}
 }
 \value{
 Invisible \code{NULL}.
 }
 \description{
-Releases resources held by an \code{lb_connection} or \code{lb_database} object.
-After calling \code{lb_close()}, the object should not be used.
-}
-\examples{
-\dontrun{
-db   <- lb_database(":memory:")
-conn <- lb_connection(db)
-lb_close(conn)
-lb_close(db)
-}
-
+Closing an object more than once is harmless. A connection cannot be closed
+while it owns open results, and a database cannot be closed while it owns
+open connections.
 }

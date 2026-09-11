@@ -2,18 +2,18 @@
 % Please edit documentation in R/convert.R
 \name{as_arrow_table}
 \alias{as_arrow_table}
-\title{Convert an lb_result to an Arrow Table}
+\title{Convert a LadybugDB result to an Arrow Table}
 \usage{
 as_arrow_table(x, ...)
 }
 \arguments{
-\item{x}{An \code{lb_result} object.}
+\item{x}{An \code{lb_result}.}
 
 \item{...}{Unused.}
 }
 \value{
-An \link[arrow:Table-class]{arrow::Table} object.
+An \code{arrow::Table} backed by LadybugDB's Arrow C Data export.
 }
 \description{
-Convert an lb_result to an Arrow Table
+Convert a LadybugDB result to an Arrow Table
 }

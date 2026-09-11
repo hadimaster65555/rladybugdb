@@ -1,76 +1,67 @@
-# tools/vendor.R — pre-populate inst/libs/ and src/vendor/ before R CMD build.
-# Run: Rscript tools/vendor.R
-# This lets CRAN / offline builds work without network access at check time.
+# Pre-populate src/vendor with the pinned, checksum-verified LadybugDB library.
 
-lbug_version <- trimws(readLines("tools/lbug_version", warn = FALSE)[1])
-
-os   <- Sys.info()[["sysname"]]   # Darwin, Linux, Windows
-arch <- Sys.info()[["machine"]]   # arm64, x86_64, aarch64
-
+version <- trimws(readLines("tools/lbug_version", warn = FALSE)[1L])
+checksums <- read.table("tools/lbug_checksums", comment.char = "#", col.names = c("asset", "sha256"))
+os <- Sys.info()[["sysname"]]
+arch <- tolower(Sys.info()[["machine"]])
+key <- paste(os, arch, sep = "-")
 artifact <- switch(
-  paste0(os, "-", arch),
-  "Darwin-arm64"   = "liblbug-osx-universal.tar.gz",
-  "Darwin-x86_64"  = "liblbug-osx-universal.tar.gz",
-  "Linux-x86_64"   = "liblbug-linux-x86_64.tar.gz",
-  "Linux-aarch64"  = "liblbug-linux-aarch64.tar.gz",
-  "Windows-x86-64" = "liblbug-windows-x86_64.zip",
-  stop("Unsupported platform: ", os, "-", arch)
+  key,
+  "Darwin-arm64" = "liblbug-static-osx-arm64.tar.gz",
+  "Darwin-aarch64" = "liblbug-static-osx-arm64.tar.gz",
+  "Darwin-x86_64" = "liblbug-static-osx-x86_64.tar.gz",
+  "Linux-x86_64" = "liblbug-static-linux-x86_64-compat.tar.gz",
+  "Linux-amd64" = "liblbug-static-linux-x86_64-compat.tar.gz",
+  "Linux-aarch64" = "liblbug-static-linux-aarch64-compat.tar.gz",
+  "Linux-arm64" = "liblbug-static-linux-aarch64-compat.tar.gz",
+  "Windows-x86_64" = "liblbug-windows-x86_64.zip",
+  "Windows-amd64" = "liblbug-windows-x86_64.zip",
+  "Windows-arm64" = "liblbug-windows-arm64.zip",
+  "Windows-aarch64" = "liblbug-windows-arm64.zip",
+  stop("Unsupported platform: ", key)
 )
+expected <- checksums$sha256[match(artifact, checksums$asset)]
+if (is.na(expected)) stop("No checksum recorded for ", artifact)
 
-url <- paste0(
-  "https://github.com/LadybugDB/ladybug/releases/download/v",
-  lbug_version, "/", artifact
-)
+url <- sprintf("https://github.com/LadybugDB/ladybug/releases/download/v%s/%s",
+               version, artifact)
+archive <- tempfile(fileext = if (endsWith(artifact, ".zip")) ".zip" else ".tar.gz")
+directory <- tempfile("rladybugdb-vendor-")
+dir.create(directory)
+on.exit(unlink(c(archive, directory), recursive = TRUE), add = TRUE)
+download.file(url, archive, mode = "wb", quiet = FALSE)
 
-vendor_inc <- "src/vendor/include"
-inst_libs  <- "inst/libs"
-dir.create(vendor_inc, recursive = TRUE, showWarnings = FALSE)
-dir.create(inst_libs,  recursive = TRUE, showWarnings = FALSE)
-
-message("Downloading: ", url)
-
-tmp_archive <- tempfile(fileext = if (grepl("\\.zip$", artifact)) ".zip" else ".tar.gz")
-on.exit(unlink(tmp_archive), add = TRUE)
-download.file(url, tmp_archive, mode = "wb", quiet = FALSE)
-
-# Extract
-tmp_dir <- tempfile()
-dir.create(tmp_dir)
-on.exit(unlink(tmp_dir, recursive = TRUE), add = TRUE)
-
-if (grepl("\\.zip$", artifact)) {
-  unzip(tmp_archive, exdir = tmp_dir)
+actual <- unname(tools::md5sum(archive))
+if (requireNamespace("openssl", quietly = TRUE)) {
+  actual <- paste(format(openssl::sha256(file(archive)), upper = FALSE), collapse = "")
 } else {
-  untar(tmp_archive, exdir = tmp_dir)
+  executable <- if (nzchar(Sys.which("sha256sum"))) "sha256sum" else "shasum"
+  args <- if (executable == "shasum") c("-a", "256", archive) else archive
+  actual <- strsplit(system2(executable, args, stdout = TRUE), "[[:space:]]+")[[1L]][1L]
+}
+if (!identical(tolower(actual), tolower(expected))) {
+  stop("SHA-256 mismatch for ", artifact, ": expected ", expected, ", got ", actual)
 }
 
-# Locate header
-hdr <- list.files(tmp_dir, pattern = "^lbug\\.h$", recursive = TRUE, full.names = TRUE)
-if (length(hdr) == 0) stop("lbug.h not found in archive")
-file.copy(hdr[1], file.path(vendor_inc, "lbug.h"), overwrite = TRUE)
-message("Installed: ", file.path(vendor_inc, "lbug.h"))
+if (endsWith(artifact, ".zip")) unzip(archive, exdir = directory) else untar(archive, exdir = directory)
+files <- list.files(directory, recursive = TRUE, full.names = TRUE, all.files = TRUE)
+pick <- function(pattern) {
+  match <- files[grepl(pattern, basename(files))]
+  if (!length(match)) stop("Missing ", pattern, " in ", artifact)
+  match[[1L]]
+}
 
-# Locate shared library
-if (os == "Darwin") {
-  lib <- list.files(tmp_dir, pattern = "liblbug\\.dylib$", recursive = TRUE, full.names = TRUE)
-  lib_dest <- file.path(inst_libs, "liblbug.dylib")
-} else if (os == "Linux") {
-  lib <- list.files(tmp_dir, pattern = "liblbug\\.so", recursive = TRUE, full.names = TRUE)
-  lib_dest <- file.path(inst_libs, "liblbug.so")
+include_dir <- "src/vendor/include"
+library_dir <- "src/vendor/lib"
+dir.create(include_dir, recursive = TRUE, showWarnings = FALSE)
+dir.create(library_dir, recursive = TRUE, showWarnings = FALSE)
+file.copy(pick("^lbug\\.h$"), file.path(include_dir, "lbug.h"), overwrite = TRUE)
+
+if (os %in% c("Darwin", "Linux")) {
+  file.copy(pick("^liblbug\\.a$"), file.path(library_dir, "liblbug.a"), overwrite = TRUE)
 } else {
-  lib <- list.files(tmp_dir, pattern = "liblbug\\.dll$", recursive = TRUE, full.names = TRUE)
-  lib_dest <- file.path(inst_libs, "liblbug.dll")
+  file.copy(pick("^lbug_shared\\.dll$"), file.path(library_dir, "lbug_shared.dll"), overwrite = TRUE)
+  file.copy(pick("^lbug_shared\\.lib$"), file.path(library_dir, "lbug_shared.lib"), overwrite = TRUE)
 }
-if (length(lib) == 0) stop("shared library not found in archive")
-file.copy(lib[1], lib_dest, overwrite = TRUE)
-message("Installed: ", lib_dest)
-
-# macOS: fix install name
-if (os == "Darwin") {
-  ret <- system2("install_name_tool",
-                 c("-id", "@rpath/liblbug.dylib", lib_dest),
-                 stdout = TRUE, stderr = TRUE)
-  message("Fixed dylib install name.")
-}
-
-message("vendor.R: done. Ready for R CMD build.")
+writeLines(version, file.path(library_dir, "ladybugdb-version"))
+message("Vendored verified LadybugDB v", version, " for ", key, ".")
