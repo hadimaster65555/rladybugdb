@@ -2,6 +2,7 @@
 ^\.DS_Store$
 ^\.github$
 ^PLAN\.md$
+^cran-comments\.md$
 ^docs$
 ^pkgdown$
 ^_pkgdown\.yml$
