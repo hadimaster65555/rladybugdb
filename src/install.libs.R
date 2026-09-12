@@ -11,9 +11,28 @@ if (!file.copy(package_dll, dest, overwrite = TRUE)) {
 }
 
 if (.Platform$OS.type == "windows") {
-  ladybug_lib <- file.path(source_dir, "vendor", "lib", "lbug_shared.dll")
-  if (!file.exists(ladybug_lib) ||
-      !file.copy(ladybug_lib, dest, overwrite = TRUE)) {
-    stop("Could not install the LadybugDB runtime DLL.")
+  runtime_dir <- file.path(source_dir, "vendor", "lib")
+  runtime_patterns <- c(
+    "lbug_shared.dll",
+    "libssl-3-*.dll",
+    "libcrypto-3-*.dll"
+  )
+  runtime_dlls <- unlist(lapply(
+    runtime_patterns,
+    function(pattern) Sys.glob(file.path(runtime_dir, pattern))
+  ), use.names = FALSE)
+  matches <- lengths(lapply(
+    runtime_patterns,
+    function(pattern) Sys.glob(file.path(runtime_dir, pattern))
+  ))
+  if (any(matches != 1L)) {
+    stop(
+      "Could not locate the LadybugDB and OpenSSL runtime DLLs: ",
+      paste(runtime_patterns[matches != 1L], collapse = ", ")
+    )
+  }
+  copied <- file.copy(runtime_dlls, dest, overwrite = TRUE)
+  if (!all(copied)) {
+    stop("Could not install the LadybugDB and OpenSSL runtime DLLs.")
   }
 }

@@ -1,6 +1,9 @@
 ^\.mcp\.json$
 ^\.DS_Store$
 ^\.github$
+^\.claude$
+^\.Rproj\.user$
+^.*\.Rproj$
 ^PLAN\.md$
 ^cran-comments\.md$
 ^docs$

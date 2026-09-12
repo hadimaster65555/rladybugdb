@@ -1,13 +1,25 @@
 #!/bin/sh
-# Download and verify the pinned LadybugDB C library for Windows.
+# Download and verify the pinned LadybugDB C library and its OpenSSL runtime
+# dependencies for Windows.
 
 set -eu
 
 LBUG_VERSION=$(tr -d '[:space:]' < tools/lbug_version)
+OPENSSL_VERSION="3.6.4"
 ARCH_RAW=${R_ARCH:-$(uname -m)}
 case "$ARCH_RAW" in
-  */arm64|*/aarch64|arm64|aarch64) ARTIFACT="liblbug-windows-arm64.zip" ;;
-  */x64|x64|x86_64|amd64|'') ARTIFACT="liblbug-windows-x86_64.zip" ;;
+  */arm64|*/aarch64|arm64|aarch64)
+    ARTIFACT="liblbug-windows-arm64.zip"
+    OPENSSL_SUBDIR="win-arm64"
+    OPENSSL_ARTIFACT="openssl-3.6.4-h3d85b8a_0.conda"
+    OPENSSL_DLL_SUFFIX="arm64"
+    ;;
+  */x64|x64|x86_64|amd64|'')
+    ARTIFACT="liblbug-windows-x86_64.zip"
+    OPENSSL_SUBDIR="win-64"
+    OPENSSL_ARTIFACT="openssl-3.6.4-hf411b9b_0.conda"
+    OPENSSL_DLL_SUFFIX="x64"
+    ;;
   *) echo "configure.win: ERROR: unsupported architecture ${ARCH_RAW}." >&2; exit 1 ;;
 esac
 
@@ -16,11 +28,61 @@ if [ -z "$EXPECTED_SHA" ]; then
   echo "configure.win: ERROR: no SHA-256 recorded for ${ARTIFACT}." >&2
   exit 1
 fi
+OPENSSL_EXPECTED_SHA=$(awk -v artifact="$OPENSSL_ARTIFACT" '$1 == artifact { print $2 }' tools/lbug_checksums)
+if [ -z "$OPENSSL_EXPECTED_SHA" ]; then
+  echo "configure.win: ERROR: no SHA-256 recorded for ${OPENSSL_ARTIFACT}." >&2
+  exit 1
+fi
 URL="https://github.com/LadybugDB/ladybug/releases/download/v${LBUG_VERSION}/${ARTIFACT}"
+OPENSSL_URL="https://conda.anaconda.org/conda-forge/${OPENSSL_SUBDIR}/${OPENSSL_ARTIFACT}"
 VENDOR_INC="$(pwd)/src/vendor/include"
 VENDOR_LIB="$(pwd)/src/vendor/lib"
 VERSION_MARKER="${VENDOR_LIB}/ladybugdb-version"
+OPENSSL_MARKER="${VENDOR_LIB}/openssl-windows-artifact"
+OPENSSL_SSL_DLL="${VENDOR_LIB}/libssl-3-${OPENSSL_DLL_SUFFIX}.dll"
+OPENSSL_CRYPTO_DLL="${VENDOR_LIB}/libcrypto-3-${OPENSSL_DLL_SUFFIX}.dll"
 mkdir -p "$VENDOR_INC" "$VENDOR_LIB"
+
+DOWNLOAD_DIR=$(mktemp -d)
+trap 'rm -rf "$DOWNLOAD_DIR"' EXIT HUP INT TERM
+
+sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{ print $1 }'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | awk '{ print $1 }'
+  else
+    echo "configure.win: ERROR: sha256sum or shasum is required." >&2
+    exit 1
+  fi
+}
+
+verify_sha256() {
+  ACTUAL_SHA=$(sha256_file "$1")
+  if [ "$ACTUAL_SHA" != "$2" ]; then
+    echo "configure.win: ERROR: SHA-256 mismatch for $3." >&2
+    echo "configure.win: expected $2, got ${ACTUAL_SHA}." >&2
+    exit 1
+  fi
+}
+
+extract_tar_zst() {
+  if command -v bsdtar >/dev/null 2>&1 && bsdtar -xf "$1" -C "$2"; then
+    return 0
+  fi
+  if command -v tar >/dev/null 2>&1 &&
+     tar --help 2>&1 | grep -q -- '--zstd' &&
+     tar --zstd -xf "$1" -C "$2"; then
+    return 0
+  fi
+  if command -v zstd >/dev/null 2>&1 && command -v tar >/dev/null 2>&1; then
+    zstd -dc "$1" | tar -xf - -C "$2"
+    return 0
+  fi
+  echo "configure.win: ERROR: bsdtar or tar with zstd support is required" >&2
+  echo "configure.win: to extract ${OPENSSL_ARTIFACT}." >&2
+  exit 1
+}
 
 VENDORED_VERSION=""
 if [ -f "$VERSION_MARKER" ]; then
@@ -31,25 +93,17 @@ if [ -f "$VENDOR_INC/lbug.h" ] && [ -f "$VENDOR_LIB/lbug_shared.dll" ] &&
    [ -f "$VENDOR_LIB/lbug_shared.lib" ] && [ "$VENDORED_VERSION" = "$LBUG_VERSION" ]; then
   echo "configure.win: using LadybugDB v${LBUG_VERSION} artifacts already in src/vendor."
 else
-  DOWNLOAD_DIR=$(mktemp -d)
-  trap 'rm -rf "$DOWNLOAD_DIR"' EXIT HUP INT TERM
   ARCHIVE="${DOWNLOAD_DIR}/${ARTIFACT}"
+  echo "configure.win: downloading ${URL}"
   curl -fL --retry 3 --connect-timeout 30 --max-time 600 "$URL" -o "$ARCHIVE"
+  verify_sha256 "$ARCHIVE" "$EXPECTED_SHA" "$ARTIFACT"
 
-  if command -v sha256sum >/dev/null 2>&1; then
-    ACTUAL_SHA=$(sha256sum "$ARCHIVE" | awk '{ print $1 }')
-  else
-    ACTUAL_SHA=$(shasum -a 256 "$ARCHIVE" | awk '{ print $1 }')
-  fi
-  if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
-    echo "configure.win: ERROR: SHA-256 mismatch for ${ARTIFACT}." >&2
-    exit 1
-  fi
-
-  unzip -q "$ARCHIVE" -d "$DOWNLOAD_DIR"
-  HEADER_SOURCE=$(find "$DOWNLOAD_DIR" -name lbug.h | head -n 1)
-  DLL_SOURCE=$(find "$DOWNLOAD_DIR" -name lbug_shared.dll | head -n 1)
-  IMPORT_SOURCE=$(find "$DOWNLOAD_DIR" -name lbug_shared.lib | head -n 1)
+  LBUG_EXTRACT_DIR="${DOWNLOAD_DIR}/ladybug"
+  mkdir -p "$LBUG_EXTRACT_DIR"
+  unzip -q "$ARCHIVE" -d "$LBUG_EXTRACT_DIR"
+  HEADER_SOURCE=$(find "$LBUG_EXTRACT_DIR" -name lbug.h | head -n 1)
+  DLL_SOURCE=$(find "$LBUG_EXTRACT_DIR" -name lbug_shared.dll | head -n 1)
+  IMPORT_SOURCE=$(find "$LBUG_EXTRACT_DIR" -name lbug_shared.lib | head -n 1)
   if [ -z "$HEADER_SOURCE" ] || [ -z "$DLL_SOURCE" ] || [ -z "$IMPORT_SOURCE" ]; then
     echo "configure.win: ERROR: incomplete LadybugDB archive ${ARTIFACT}." >&2
     exit 1
@@ -58,6 +112,46 @@ else
   cp "$DLL_SOURCE" "$VENDOR_LIB/lbug_shared.dll"
   cp "$IMPORT_SOURCE" "$VENDOR_LIB/lbug_shared.lib"
   printf '%s\n' "$LBUG_VERSION" > "$VERSION_MARKER"
+fi
+
+VENDORED_OPENSSL_ARTIFACT=""
+if [ -f "$OPENSSL_MARKER" ]; then
+  VENDORED_OPENSSL_ARTIFACT=$(tr -d '[:space:]' < "$OPENSSL_MARKER")
+fi
+
+if [ -f "$OPENSSL_SSL_DLL" ] && [ -f "$OPENSSL_CRYPTO_DLL" ] &&
+   [ "$VENDORED_OPENSSL_ARTIFACT" = "$OPENSSL_ARTIFACT" ]; then
+  echo "configure.win: using OpenSSL ${OPENSSL_VERSION} runtime already in src/vendor."
+else
+  OPENSSL_ARCHIVE="${DOWNLOAD_DIR}/${OPENSSL_ARTIFACT}"
+  OPENSSL_OUTER_DIR="${DOWNLOAD_DIR}/openssl-outer"
+  OPENSSL_PAYLOAD_DIR="${DOWNLOAD_DIR}/openssl-payload"
+  mkdir -p "$OPENSSL_OUTER_DIR" "$OPENSSL_PAYLOAD_DIR"
+
+  echo "configure.win: downloading ${OPENSSL_URL}"
+  curl -fL --retry 3 --connect-timeout 30 --max-time 600 \
+    "$OPENSSL_URL" -o "$OPENSSL_ARCHIVE"
+  verify_sha256 "$OPENSSL_ARCHIVE" "$OPENSSL_EXPECTED_SHA" "$OPENSSL_ARTIFACT"
+
+  unzip -q "$OPENSSL_ARCHIVE" -d "$OPENSSL_OUTER_DIR"
+  OPENSSL_PAYLOAD=$(find "$OPENSSL_OUTER_DIR" -name 'pkg-*.tar.zst' | head -n 1)
+  if [ -z "$OPENSSL_PAYLOAD" ]; then
+    echo "configure.win: ERROR: ${OPENSSL_ARTIFACT} has no package payload." >&2
+    exit 1
+  fi
+  extract_tar_zst "$OPENSSL_PAYLOAD" "$OPENSSL_PAYLOAD_DIR"
+
+  SSL_SOURCE=$(find "$OPENSSL_PAYLOAD_DIR" -name "libssl-3-${OPENSSL_DLL_SUFFIX}.dll" | head -n 1)
+  CRYPTO_SOURCE=$(find "$OPENSSL_PAYLOAD_DIR" -name "libcrypto-3-${OPENSSL_DLL_SUFFIX}.dll" | head -n 1)
+  if [ -z "$SSL_SOURCE" ] || [ -z "$CRYPTO_SOURCE" ]; then
+    echo "configure.win: ERROR: ${OPENSSL_ARTIFACT} has no matching OpenSSL DLLs." >&2
+    exit 1
+  fi
+
+  cp "$SSL_SOURCE" "$OPENSSL_SSL_DLL"
+  cp "$CRYPTO_SOURCE" "$OPENSSL_CRYPTO_DLL"
+  printf '%s\n' "$OPENSSL_ARTIFACT" > "$OPENSSL_MARKER"
+  echo "configure.win: verified and installed OpenSSL ${OPENSSL_VERSION} runtime."
 fi
 
 if command -v gendef >/dev/null 2>&1 && command -v dlltool >/dev/null 2>&1; then

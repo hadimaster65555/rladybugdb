@@ -1250,14 +1250,18 @@ static void arrow_array_finalizer(SEXP pointer) {
 
 static SEXP external_arrow_schema(ArrowSchema* schema) {
   SEXP pointer = PROTECT(R_MakeExternalPtr(schema, R_NilValue, R_NilValue));
-  R_RegisterCFinalizerEx(pointer, arrow_schema_finalizer, TRUE);
+  // Windows headers define TRUE as an int; R-devel requires Rboolean here.
+  R_RegisterCFinalizerEx(pointer, arrow_schema_finalizer,
+                         static_cast<Rboolean>(1));
   UNPROTECT(1);
   return pointer;
 }
 
 static SEXP external_arrow_array(ArrowArray* array) {
   SEXP pointer = PROTECT(R_MakeExternalPtr(array, R_NilValue, R_NilValue));
-  R_RegisterCFinalizerEx(pointer, arrow_array_finalizer, TRUE);
+  // Windows headers define TRUE as an int; R-devel requires Rboolean here.
+  R_RegisterCFinalizerEx(pointer, arrow_array_finalizer,
+                         static_cast<Rboolean>(1));
   UNPROTECT(1);
   return pointer;
 }

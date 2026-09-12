@@ -10,6 +10,10 @@
   runtime DLL through `install.libs.R`.
 * Result, connection, and database ownership is now explicit. Closed-handle,
   live-child, finalizer, and double-close paths are checked natively.
+* Fixed R-devel/Windows compilation by passing explicit `Rboolean` values to
+  Arrow external-pointer finalizers.
+* Fixed Windows loading by installing the checksum-verified OpenSSL runtime
+  DLLs required by the upstream LadybugDB DLL.
 * Added a persisted 0.15.2 compatibility fixture and migration guidance.
 
 ## Results, parameters, and types

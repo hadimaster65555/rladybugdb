@@ -64,4 +64,16 @@ if (os %in% c("Darwin", "Linux")) {
   file.copy(pick("^lbug_shared\\.lib$"), file.path(library_dir, "lbug_shared.lib"), overwrite = TRUE)
 }
 writeLines(version, file.path(library_dir, "ladybugdb-version"))
+
+if (os == "Windows") {
+  shell <- Sys.which("sh")
+  if (!nzchar(shell)) {
+    stop("Rtools sh is required to vendor the Windows runtime dependencies.")
+  }
+  status <- system2(shell, "configure.win")
+  if (!identical(status, 0L)) {
+    stop("configure.win failed while vendoring Windows runtime dependencies.")
+  }
+}
+
 message("Vendored verified LadybugDB v", version, " for ", key, ".")

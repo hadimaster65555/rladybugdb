@@ -23,8 +23,8 @@ remotes::install_github("hadimaster65555/rladybugdb")
 During installation, the configure script selects the LadybugDB 0.20.4
 artifact for the current operating system and CPU, verifies its published
 SHA-256 checksum, and compiles the package against the matching header. macOS
-and Linux use the upstream static archive; Windows installs the matching DLL.
-OpenSSL 3 is required by the upstream binaries.
+and Linux use the upstream static archive. Windows installs the matching
+LadybugDB DLL together with its checksum-verified OpenSSL 3 runtime DLLs.
 
 ```r
 library(rladybugdb)

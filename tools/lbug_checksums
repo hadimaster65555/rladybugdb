@@ -10,3 +10,8 @@ liblbug-static-linux-aarch64-compat.tar.gz 7053d0501d6f28adc875b8a0325b59cb34bb5
 liblbug-static-linux-x86_64-compat.tar.gz 799f18f165fa15075b049d71e8429e0ff9f7688be5d186c4973d111a6980509a
 liblbug-static-osx-arm64.tar.gz 7a6c574b6d681803455f50bc83a951eacb8707be8fe110d1ac7c3aec1201f1a2
 liblbug-static-osx-x86_64.tar.gz 886b008b24b81fa880e65b00e76ac1d0724ce7e5a5aa3a675365c8e48cc6cb59
+
+# OpenSSL v3.6.4 conda-forge runtime packages used on Windows.
+# Source: https://anaconda.org/conda-forge/openssl/files
+openssl-3.6.4-hf411b9b_0.conda 9dddb559ba49744d5d94092d8d13cb0567f5c3b3f439f3acf28433d1f4256acc
+openssl-3.6.4-h3d85b8a_0.conda 4281486e10202c3253230d5dfffda02782dedf2305c88893a2be0ea5c08cd012
