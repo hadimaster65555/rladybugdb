@@ -26,4 +26,7 @@ return an \code{lb_result}.
 }
 \description{
 These are thin wrappers around LadybugDB's extension Cypher commands.
+Remote installation and updating are unavailable in the CRAN build because
+those operations require a native networking stack. Compatible extensions
+installed outside R can still be loaded with \code{lb_load_extension()}.
 }

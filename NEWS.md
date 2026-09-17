@@ -1,3 +1,46 @@
+# rladybugdb 0.4.4
+
+## CRAN build diagnostics
+
+* The configure script no longer forwards R's diagnostic flags (`-Wall`,
+  `-pedantic`, and related) to the bundled LadybugDB build. The vendored
+  third-party sources use documented compiler extensions that produced
+  significant-warning output on Debian Clang. All other configured flags,
+  including optimisation, debugging, architecture, hardening, and sanitizer
+  settings, are still passed through, and this package's own sources continue
+  to be compiled with R's full flags.
+
+# rladybugdb 0.4.3
+
+## CRAN Linux atomic runtime
+
+* Added a configure-time C++20 link test for LadybugDB's 16-byte atomic
+  operations. The package now links `libatomic` only on toolchains that require
+  it, fixing package loading with Debian Clang 23 while remaining portable to
+  platforms that provide the operations natively.
+
+# rladybugdb 0.4.2
+
+## CRAN compiler portability
+
+* Added explicit fixed-width integer declarations for bundled Thrift so the
+  source builds with the stricter Clang 23 headers used by Debian R-devel.
+* Fixed bundled CRoaring inline linkage for Rtools/MinGW and restricted the
+  MSVC structured-exception translator to MSVC builds.
+* Rtools builds now use LadybugDB's malloc-backed buffer manager, avoiding
+  reliance on MSVC structured exception handling under MinGW.
+
+# rladybugdb 0.4.1
+
+## CRAN portability
+
+* Replaced downloaded precompiled libraries with a pinned, checksum-verified
+  LadybugDB source archive that is compiled by R's C++20 toolchain.
+* Added a small documented upstream portability patch so linked code does not
+  call process-terminating functions, system RNGs, or write directly to
+  stdout/stderr. Remote extension installation is disabled in this build,
+  removing the native OpenSSL runtime dependency.
+
 # rladybugdb 0.4.0
 
 ## Engine and native safety

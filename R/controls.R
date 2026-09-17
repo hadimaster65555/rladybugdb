@@ -58,6 +58,9 @@ lb_rollback <- function(conn) .lb_transaction_command(conn, "ROLLBACK")
 #' Manage LadybugDB extensions
 #'
 #' These are thin wrappers around LadybugDB's extension Cypher commands.
+#' Remote installation and updating are unavailable in the CRAN build because
+#' those operations require a native networking stack. Compatible extensions
+#' installed outside R can still be loaded with `lb_load_extension()`.
 #'
 #' @param conn An `lb_connection`.
 #' @param name Official extension name.
@@ -71,7 +74,15 @@ lb_list_extensions <- function(conn) {
 #' @rdname lb_list_extensions
 #' @export
 lb_install_extension <- function(conn, name) {
-  lb_execute(conn, sprintf("INSTALL %s", .lb_extension_name(name)))
+  .lb_extension_name(name)
+  rlang::abort(
+    paste(
+      "Remote extension installation is unavailable in the CRAN build.",
+      "Install a compatible LadybugDB extension outside R, then use",
+      "`lb_load_extension()`."
+    ),
+    class = "rladybugdb_error_unsupported"
+  )
 }
 
 #' @rdname lb_list_extensions
@@ -83,5 +94,12 @@ lb_load_extension <- function(conn, name) {
 #' @rdname lb_list_extensions
 #' @export
 lb_update_extension <- function(conn, name) {
-  lb_execute(conn, sprintf("UPDATE %s", .lb_extension_name(name)))
+  .lb_extension_name(name)
+  rlang::abort(
+    paste(
+      "Remote extension updates are unavailable in the CRAN build.",
+      "Update the compatible LadybugDB extension outside R."
+    ),
+    class = "rladybugdb_error_unsupported"
+  )
 }

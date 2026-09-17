@@ -11,10 +11,12 @@ vignette: >
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 ```
 
-LadybugDB extensions add graph algorithms, indexes, and external data sources
-without increasing the core engine size. Extension installation downloads
-platform-specific code, so the examples are not executed while this vignette
-is built.
+LadybugDB extensions add graph algorithms, indexes, and external data sources.
+The CRAN build intentionally excludes the engine's native networking stack:
+`lb_install_extension()` and `lb_update_extension()` therefore report an
+unsupported-operation error. A compatible extension installed outside R can
+still be loaded with `lb_load_extension()`. The examples are not executed while
+this vignette is built.
 
 ```{r eval=FALSE}
 library(rladybugdb)
@@ -27,12 +29,11 @@ on.exit({
 }, add = TRUE)
 
 lb_list_extensions(conn)
-lb_close(lb_install_extension(conn, "algo"))
 lb_close(lb_load_extension(conn, "algo"))
 ```
 
-The helpers validate official extension names and issue the same `INSTALL`,
-`LOAD`, and `UPDATE` commands available directly through `lb_execute()`.
+The helpers validate official extension names. The CRAN build supports `LOAD`
+for compatible extension files installed outside R.
 
 ## PageRank and Louvain
 
@@ -70,7 +71,6 @@ The `FTS` extension indexes string properties on node tables and ranks matches
 with Okapi BM25.
 
 ```{r eval=FALSE}
-lb_close(lb_install_extension(conn, "fts"))
 lb_close(lb_load_extension(conn, "fts"))
 lb_close(lb_execute(
   conn,
@@ -96,7 +96,6 @@ The `vector` extension provides a native disk-backed HNSW index over fixed
 FLOAT or DOUBLE arrays.
 
 ```{r eval=FALSE}
-lb_close(lb_install_extension(conn, "vector"))
 lb_close(lb_load_extension(conn, "vector"))
 lb_close(lb_execute(
   conn,
@@ -124,7 +123,6 @@ placeholders and must come from trusted configuration.
 
 ```{r eval=FALSE}
 for (extension in c("duckdb", "postgres", "sqlite")) {
-  lb_close(lb_install_extension(conn, extension))
   lb_close(lb_load_extension(conn, extension))
 }
 
@@ -149,12 +147,10 @@ use extensions and expose their sources through the same `LOAD FROM` model.
 ```{r eval=FALSE}
 parquet_rows <- lb_query(conn, "LOAD FROM 'events/*.parquet' RETURN *")
 
-lb_close(lb_install_extension(conn, "iceberg"))
 lb_close(lb_load_extension(conn, "iceberg"))
 # Configure the catalog according to the LadybugDB Iceberg documentation,
 # then scan the attached catalog.table with LOAD FROM.
 
-lb_close(lb_install_extension(conn, "adbc"))
 lb_close(lb_load_extension(conn, "adbc"))
 # Install the database vendor's ADBC driver, attach it using that driver's
 # connection options, then query its tables with LOAD FROM.

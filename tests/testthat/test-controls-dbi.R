@@ -38,6 +38,10 @@ test_that("extension helpers expose official metadata and validate names", {
   expect_gt(nrow(extensions), 0L)
   expect_error(lb_install_extension(conn, "bad name!"),
                class = "rladybugdb_error_invalid_arg")
+  expect_error(lb_install_extension(conn, "algo"),
+               class = "rladybugdb_error_unsupported")
+  expect_error(lb_update_extension(conn, "algo"),
+               class = "rladybugdb_error_unsupported")
 })
 
 test_that("DBI query, binding, metadata, and transactions work", {

@@ -20,11 +20,10 @@ conformance beyond the behavior tested here.
 remotes::install_github("hadimaster65555/rladybugdb")
 ```
 
-During installation, the configure script selects the LadybugDB 0.20.4
-artifact for the current operating system and CPU, verifies its published
-SHA-256 checksum, and compiles the package against the matching header. macOS
-and Linux use the upstream static archive. Windows installs the matching
-LadybugDB DLL together with its checksum-verified OpenSSL 3 runtime DLLs.
+The source package contains the pinned LadybugDB 0.20.4 source code. During
+installation, the configure script verifies that source archive and compiles a
+static library with R's own C++20 toolchain. No executable code or libraries
+are downloaded during installation.
 
 ```r
 library(rladybugdb)
@@ -189,15 +188,20 @@ BLOB)`.
 path values while preserving labels, properties, isolated nodes, and exact
 internal identifiers.
 
-Extension helpers are deliberately thin wrappers:
+The CRAN build can list installed extensions and load a compatible extension
+that was installed outside R:
 
 ```r
 lb_list_extensions(conn)
-install_result <- lb_install_extension(conn, "algo")
-lb_close(install_result)
+
+# After installing a compatible extension outside R:
 load_result <- lb_load_extension(conn, "algo")
 lb_close(load_result)
 ```
+
+`lb_install_extension()` and `lb_update_extension()` report an unsupported
+operation in the CRAN build because native remote-extension networking is not
+linked.
 
 See `vignette("extensions", package = "rladybugdb")` for PageRank, Louvain,
 BM25 full-text search, HNSW vector search, and data interoperability examples.
@@ -210,17 +214,19 @@ database before opening it with a new engine. See
 `vignette("storage-migration", package = "rladybugdb")` for migration and
 recovery steps.
 
-For an offline build, pre-populate the platform artifacts while network access
-is available, then build and install from the resulting source tree:
+Source-package builds are offline by default because the pinned LadybugDB
+source is included under `tools/vendor`. Maintainers can refresh that archive
+for a new pinned engine version with:
 
 ```r
 Rscript tools/vendor.R
 R CMD INSTALL .
 ```
 
-The pinned version is stored in `tools/lbug_version`; checksums are in
-`tools/lbug_checksums`. A clean source archive excludes downloaded and compiled
-artifacts and retrieves the verified platform artifact during installation.
+The pinned version is stored in `tools/lbug_version`; source checksums are in
+`tools/lbug_source_checksums`. The maintainer script verifies the upstream
+source, applies the documented CRAN portability patch, and recreates the local
+source archive.
 
 Runnable package examples are installed under `inst/examples`.
 

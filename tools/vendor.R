@@ -1,79 +1,96 @@
-# Pre-populate src/vendor with the pinned, checksum-verified LadybugDB library.
+# Recreate the pinned, CRAN-patched LadybugDB source archive.
+# This maintainer utility is not run by configure or during package install.
 
 version <- trimws(readLines("tools/lbug_version", warn = FALSE)[1L])
-checksums <- read.table("tools/lbug_checksums", comment.char = "#", col.names = c("asset", "sha256"))
-os <- Sys.info()[["sysname"]]
-arch <- tolower(Sys.info()[["machine"]])
-key <- paste(os, arch, sep = "-")
-artifact <- switch(
-  key,
-  "Darwin-arm64" = "liblbug-static-osx-arm64.tar.gz",
-  "Darwin-aarch64" = "liblbug-static-osx-arm64.tar.gz",
-  "Darwin-x86_64" = "liblbug-static-osx-x86_64.tar.gz",
-  "Linux-x86_64" = "liblbug-static-linux-x86_64-compat.tar.gz",
-  "Linux-amd64" = "liblbug-static-linux-x86_64-compat.tar.gz",
-  "Linux-aarch64" = "liblbug-static-linux-aarch64-compat.tar.gz",
-  "Linux-arm64" = "liblbug-static-linux-aarch64-compat.tar.gz",
-  "Windows-x86_64" = "liblbug-windows-x86_64.zip",
-  "Windows-amd64" = "liblbug-windows-x86_64.zip",
-  "Windows-arm64" = "liblbug-windows-arm64.zip",
-  "Windows-aarch64" = "liblbug-windows-arm64.zip",
-  stop("Unsupported platform: ", key)
+checksums_file <- "tools/lbug_source_checksums"
+checksums <- read.table(
+  checksums_file,
+  comment.char = "#",
+  col.names = c("asset", "sha256"),
+  stringsAsFactors = FALSE
 )
-expected <- checksums$sha256[match(artifact, checksums$asset)]
-if (is.na(expected)) stop("No checksum recorded for ", artifact)
 
-url <- sprintf("https://github.com/LadybugDB/ladybug/releases/download/v%s/%s",
-               version, artifact)
-archive <- tempfile(fileext = if (endsWith(artifact, ".zip")) ".zip" else ".tar.gz")
-directory <- tempfile("rladybugdb-vendor-")
-dir.create(directory)
-on.exit(unlink(c(archive, directory), recursive = TRUE), add = TRUE)
-download.file(url, archive, mode = "wb", quiet = FALSE)
+crate_name <- sprintf("lbug-%s.crate", version)
+archive_name <- sprintf("ladybugdb-%s.tar.xz", version)
+expected_crate_sha <- checksums$sha256[match(crate_name, checksums$asset)]
+if (is.na(expected_crate_sha)) {
+  stop("No upstream crate checksum recorded for ", crate_name)
+}
 
-actual <- unname(tools::md5sum(archive))
-if (requireNamespace("openssl", quietly = TRUE)) {
-  actual <- paste(format(openssl::sha256(file(archive)), upper = FALSE), collapse = "")
-} else {
+sha256_file <- function(path) {
   executable <- if (nzchar(Sys.which("sha256sum"))) "sha256sum" else "shasum"
-  args <- if (executable == "shasum") c("-a", "256", archive) else archive
-  actual <- strsplit(system2(executable, args, stdout = TRUE), "[[:space:]]+")[[1L]][1L]
-}
-if (!identical(tolower(actual), tolower(expected))) {
-  stop("SHA-256 mismatch for ", artifact, ": expected ", expected, ", got ", actual)
-}
-
-if (endsWith(artifact, ".zip")) unzip(archive, exdir = directory) else untar(archive, exdir = directory)
-files <- list.files(directory, recursive = TRUE, full.names = TRUE, all.files = TRUE)
-pick <- function(pattern) {
-  match <- files[grepl(pattern, basename(files))]
-  if (!length(match)) stop("Missing ", pattern, " in ", artifact)
-  match[[1L]]
+  if (!nzchar(Sys.which(executable))) {
+    stop("sha256sum or shasum is required")
+  }
+  args <- if (executable == "shasum") c("-a", "256", path) else path
+  output <- system2(executable, args, stdout = TRUE, stderr = TRUE)
+  status <- attr(output, "status")
+  if (!is.null(status) && status != 0L) {
+    stop(executable, " failed: ", paste(output, collapse = "\n"))
+  }
+  strsplit(output[[1L]], "[[:space:]]+")[[1L]][1L]
 }
 
-include_dir <- "src/vendor/include"
-library_dir <- "src/vendor/lib"
-dir.create(include_dir, recursive = TRUE, showWarnings = FALSE)
-dir.create(library_dir, recursive = TRUE, showWarnings = FALSE)
-file.copy(pick("^lbug\\.h$"), file.path(include_dir, "lbug.h"), overwrite = TRUE)
+work_dir <- tempfile("rladybugdb-vendor-")
+dir.create(work_dir)
+on.exit(unlink(work_dir, recursive = TRUE), add = TRUE)
 
-if (os %in% c("Darwin", "Linux")) {
-  file.copy(pick("^liblbug\\.a$"), file.path(library_dir, "liblbug.a"), overwrite = TRUE)
+crate <- file.path(work_dir, crate_name)
+url <- sprintf(
+  "https://static.crates.io/crates/lbug/lbug-%s.crate",
+  version
+)
+download.file(url, crate, mode = "wb", quiet = FALSE)
+actual_crate_sha <- sha256_file(crate)
+if (!identical(tolower(actual_crate_sha), tolower(expected_crate_sha))) {
+  stop(
+    "SHA-256 mismatch for ", crate_name, ": expected ", expected_crate_sha,
+    ", got ", actual_crate_sha
+  )
+}
+
+extract_dir <- file.path(work_dir, "source")
+dir.create(extract_dir)
+untar(crate, exdir = extract_dir)
+lbug_root <- file.path(extract_dir, sprintf("lbug-%s", version))
+lbug_source <- file.path(lbug_root, "lbug-src")
+if (!file.exists(file.path(lbug_source, "CMakeLists.txt"))) {
+  stop("The upstream crate does not contain lbug-src/CMakeLists.txt")
+}
+
+patch_executable <- Sys.which("patch")
+if (!nzchar(patch_executable)) {
+  stop("patch is required to apply the CRAN portability patch")
+}
+patch_file <- normalizePath("tools/patches/ladybugdb-cran.patch")
+status <- system2(
+  patch_executable,
+  c("-d", shQuote(lbug_source), "-p1", "-i", shQuote(patch_file))
+)
+if (!identical(status, 0L)) {
+  stop("Could not apply ", patch_file)
+}
+
+dir.create("tools/vendor", recursive = TRUE, showWarnings = FALSE)
+archive <- normalizePath(
+  file.path("tools/vendor", archive_name),
+  mustWork = FALSE
+)
+old_wd <- setwd(lbug_root)
+on.exit(setwd(old_wd), add = TRUE)
+utils::tar(archive, files = "lbug-src", compression = "xz", tar = "internal")
+setwd(old_wd)
+
+archive_sha <- sha256_file(archive)
+lines <- readLines(checksums_file, warn = FALSE)
+pattern <- paste0("^", gsub("\\.", "\\\\.", archive_name), "[[:space:]]+")
+replacement <- paste(archive_name, archive_sha)
+if (any(grepl(pattern, lines))) {
+  lines[grepl(pattern, lines)] <- replacement
 } else {
-  file.copy(pick("^lbug_shared\\.dll$"), file.path(library_dir, "lbug_shared.dll"), overwrite = TRUE)
-  file.copy(pick("^lbug_shared\\.lib$"), file.path(library_dir, "lbug_shared.lib"), overwrite = TRUE)
+  lines <- c(lines, replacement)
 }
-writeLines(version, file.path(library_dir, "ladybugdb-version"))
+writeLines(lines, checksums_file)
 
-if (os == "Windows") {
-  shell <- Sys.which("sh")
-  if (!nzchar(shell)) {
-    stop("Rtools sh is required to vendor the Windows runtime dependencies.")
-  }
-  status <- system2(shell, "configure.win")
-  if (!identical(status, 0L)) {
-    stop("configure.win failed while vendoring Windows runtime dependencies.")
-  }
-}
-
-message("Vendored verified LadybugDB v", version, " for ", key, ".")
+message("Vendored LadybugDB v", version, " source: ", archive)
+message("SHA-256: ", archive_sha)

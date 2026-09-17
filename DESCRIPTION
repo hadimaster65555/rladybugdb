@@ -1,6 +1,6 @@
 Package: rladybugdb
 Title: R Interface to the 'LadybugDB' Embedded Graph Database
-Version: 0.4.0
+Version: 0.4.4
 Authors@R: c(
     person("Raden Muhammad", "Hadi", email = "hadimaster65555@gmail.com", role = c("aut", "cre"))
     )
@@ -13,7 +13,7 @@ Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
 NeedsCompilation: yes
-SystemRequirements: C++17, OpenSSL 3 (required by upstream LadybugDB binaries)
+SystemRequirements: C++20, CMake (>= 3.15)
 Imports:
     DBI (>= 1.2.0),
     methods,

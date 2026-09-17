@@ -17,3 +17,5 @@
 ^src/Makevars$
 ^vignettes/.*\.pdf$
 ^rladybugdb.*$
+^.*_00install\.out\.txt$
+^debian_.*\.txt$

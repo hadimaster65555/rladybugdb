@@ -11,7 +11,7 @@ vignette: >
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 ```
 
-`rladybugdb` 0.4.0 embeds LadybugDB 0.20.4. Earlier native releases of the
+`rladybugdb` 0.4.3 embeds LadybugDB 0.20.4. Earlier native releases of the
 package embedded LadybugDB 0.15.2. LadybugDB 0.20.4 can read the storage
 version produced by 0.15.x; the package tests this with a database created by
 the old engine rather than only testing a newly created file.

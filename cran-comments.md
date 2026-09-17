@@ -1,73 +1,129 @@
 ## Test environments
 
-* macOS Tahoe 26.6.2 (aarch64), R 4.5.2, Apple Clang 21.
-* win-builder and Debian incoming pre-tests, R-devel.
-* `R CMD check --as-cran` with Suggests packages installed.
+* macOS Tahoe 26.6.2 (aarch64), R 4.6.1, Apple Clang 21.
+* `R CMD check --as-cran rladybugdb_0.4.4.tar.gz` with all Suggests
+  installed, run with `CFLAGS` and `CXX20FLAGS` set to `-g -O2 -Wall
+  -pedantic` so the diagnostics reported by the Debian pre-test are
+  reproduced locally.
 
 ## R CMD check results
 
-0 errors | 0 warnings | 2 notes
+0 errors | 0 warnings | 1 note
 
-## NOTE 1: CRAN incoming feasibility
+## Additional portability verification
+
+* Debian-based Linux container (aarch64), Clang 19.1.7: focused C++20
+  16-byte atomic link and runtime-load test.
+
+## NOTE: CRAN incoming feasibility
 
 ```
 New submission
-
-Possibly misspelled words in DESCRIPTION:
-  LadybugDB (10:9)
 ```
 
 This is a new submission.
 
-The flagged word is the name of the upstream database. One occurrence of
-`LadybugDB` in the Description field had been left unquoted; it is now quoted,
-so every software, product, and language name in Title and Description
-('LadybugDB', 'Cypher', 'Kuzu', 'Rcpp', 'Python') is consistently in single
-quotes. The names are also recorded in `inst/WORDLIST`.
+## Changes in response to the 0.4.3 incoming Debian install pre-test
 
-## NOTE 2: checking compiled code
+The Debian R-devel pre-test using Clang 23.1.1 installed the package
+successfully, but `00install.out` contained significant warnings
+(`-Wgnu-anonymous-struct` and `-Wnested-anon-types`) from the bundled RE2
+sources in the vendored LadybugDB tree.
 
-The check reports symbols such as `abort`, `rand`, `printf`, `puts`,
-`putchar`, `stderr`, `std::cout`, and `std::cerr`.
+The configure script forwarded R's configured compiler flags unchanged to the
+CMake build of the bundled engine, so `-Wall -pedantic` was applied to
+third-party code that intentionally uses compiler extensions. Those diagnostics
+are not actionable in this package. Configure now removes diagnostic-only flags
+(`-Wall`, `-Wextra`, `-W`, `-pedantic`, `-Wpedantic`, `-pedantic-errors`,
+`-Weverything`) before passing R's flags to the bundled build. Every other
+configured flag, including optimisation, debugging, architecture, hardening
+(for example `-Wp,-D_FORTIFY_SOURCE=3`), linker, and sanitizer settings, is
+still passed through unchanged. This package's own sources in `src/` are
+unaffected and continue to compile with R's full flags, including `-pedantic`,
+through `src/Makevars`.
 
-None of these are called by this package. The R wrapper sources
-(`src/rladybugdb.cpp`, `src/RcppExports.cpp`) contain no calls to any of them;
-all diagnostic output goes through `Rprintf()` / `REprintf()`. The only
-undefined symbols in the wrapper objects that resemble the flagged names are
-`Rprintf`, `REprintf`, and the compiler-emitted C++ ABI helpers
-`__cxa_atexit` and `__cxa_guard_abort` (static-local initialisation), which are
-not calls to `exit` or `abort`.
+No warning suppression flags were added, so the build does not depend on
+compiler-specific `-Wno-*` options.
 
-Every flagged symbol is linked in from the unmodified upstream LadybugDB
-library, and each one is traceable to a specific upstream object file:
+## Changes in response to the 0.4.2 incoming Debian install pre-test
 
-| Symbol                    | Upstream object file                                            | Origin                                             |
-| ------------------------- | --------------------------------------------------------------- | -------------------------------------------------- |
-| `printf`, `puts`, `putchar` | `roaring.c.o`                                                   | bundled CRoaring debug dump helpers (`roaring_bitmap_printf`, `container_printf`, `bitset_print`) |
-| `std::cout`, `std::cerr`  | `ConsoleErrorListener.cpp.o`, `Parser.cpp.o`, `ParserATNSimulator.cpp.o`, `ATNState.cpp.o`, `RuntimeMetaData.cpp.o`, `TokenStreamRewriter.cpp.o` | bundled ANTLR4 C++ runtime used by the 'Cypher' parser |
-| `std::cout`               | `terminal_progress_bar_display.cpp.o`                            | upstream interactive CLI shell progress bar, not reachable through the C API |
-| `stderr`                  | `art_index.cpp.o`                                                | upstream adaptive-radix-tree index diagnostics      |
-| `abort`                   | `prog.cpp.o`                                                     | upstream parser program object                      |
-| `rand`                    | `extension_installer.cpp.o`                                      | upstream extension installer, not reachable through the DBI interface |
+The Debian R-devel pre-test using Clang 23.1.1 compiled LadybugDB to 100% and
+linked `rladybugdb.so`, but the temporary-load test then failed with an
+unresolved `__atomic_compare_exchange` symbol. LadybugDB uses a 16-byte
+`std::atomic<EvictionCandidate>`; Debian Clang implements this operation using
+the compiler's `libatomic` runtime, which was absent from the final package
+link command.
 
-These live in diagnostic, CLI-only, and third-party vendored code paths that
-the DBI bindings never enter. Because the platform artifacts are static
-archives, the linker retains the symbols even though the code is not invoked,
-which is the situation described by the check's own caveat that "the detected
-symbols are linked into the code but might come from libraries and not actually
-be called". Removing them would require patching upstream LadybugDB, and
-patching the verified upstream binaries would defeat the checksum verification
-described below.
+The configure script now compiles and links a small C++20 executable using the
+same compiler and flags reported by R. It first tests the 16-byte atomic
+operation without an additional library, then retries with `-latomic` if
+needed. The detected library is placed after the static LadybugDB archive in
+`PKG_LIBS`. Configuration fails early with a specific diagnostic if neither
+link succeeds.
 
-On Windows the same symbols appear in the shipped upstream runtime DLLs
-(`lbug_shared.dll`, and `_exit` from the unmodified OpenSSL `libcrypto-3-x64.dll`)
-rather than in the wrapper.
+A focused Debian-based Linux Clang test reproduced the unresolved symbol
+without `-latomic`; the same executable linked and ran successfully with `-latomic`
+and resolved `libatomic.so.1`. On the macOS test system, the operation is
+provided natively and the package correctly avoids adding `-latomic`. The full
+check reported above completed successfully, including installation, loading,
+compiled-code inspection, and tests.
 
-## Bundled binaries
+## Changes in response to the 0.4.1 incoming install pre-tests
 
-The `configure` and `configure.win` scripts select the matching LadybugDB
-header and static/import library for each supported platform, download only
-over HTTPS from the upstream release page, and verify pinned SHA-256 checksums
-before compilation. On Windows the two OpenSSL runtime DLLs required by the
-upstream LadybugDB DLL are likewise downloaded, verified against pinned
-checksums, and installed beside the package DLL.
+The Debian R-devel pre-test used Clang 23 and found that the bundled Thrift
+transport header used `uint8_t` and `uint32_t` without directly including the
+standard fixed-width integer header. The vendored source patch now includes
+`<stdint.h>` before those declarations.
+
+The Windows R-devel pre-test used Rtools/MinGW and exposed two upstream
+compiler-assumption issues. CRoaring's C inline definition produced an external
+symbol that collided with the C++ translation unit's definition of
+`roaring_bitmap_contains`, and LadybugDB selected the MSVC-only
+`_set_se_translator` API for every `_WIN32` compiler. The vendored source patch
+now gives the affected CRoaring inline function internal linkage on MinGW,
+omits the corresponding external-inline declaration there, and restricts the
+structured-exception translator to `_MSC_VER` builds. The package configure
+script also enables LadybugDB's malloc-backed buffer manager on
+MINGW/MSYS/CYGWIN, so Rtools does not depend on MSVC structured exception
+handling.
+
+The source archive and checksum manifest were regenerated after applying these
+patches. A fresh build from the resulting archive and the check reported above
+both completed successfully; in particular:
+
+```
+* checking whether package 'rladybugdb' can be installed ... OK
+* checking compiled code ... OK
+* checking tests ... OK
+```
+
+## Changes in response to the 0.4.0 incoming pre-test
+
+The 0.4.0 incoming pre-test reported unsafe symbols in precompiled upstream
+LadybugDB and OpenSSL libraries. Version 0.4.1 no longer downloads or ships
+precompiled libraries or runtime DLLs.
+
+The package now contains the LadybugDB 0.20.4 source archive and builds a
+static library during installation with CMake and R's configured C/C++
+toolchain. The archive has a pinned SHA-256 checksum, and the reproducible
+vendoring procedure and CRAN-specific source patch are included under
+`tools/`. The source patch removes or disables native code paths that call
+`abort`, `exit`, the system RNG, or write directly to stdout/stderr. Native
+remote-extension installation is disabled in the CRAN build, so OpenSSL and
+the upstream HTTP client are not linked.
+
+The resulting package installs one shared library and no third-party runtime
+DLLs. In the check reported above, both relevant checks now pass:
+
+```
+* checking compilation flags in Makevars ... OK
+* checking compiled code ... OK
+```
+
+All examples, tests, vignettes, and the PDF and HTML manuals also pass. The
+source package contains no `.o`, `.a`, `.so`, `.dll`, `.dylib`, or executable
+files.
+
+The source tarball is 8.7 MB. A clean native installation took approximately
+14 minutes elapsed on the macOS test system. The build performs no network
+access and is deliberately limited to at most two parallel compile jobs.
