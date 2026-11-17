@@ -37,6 +37,15 @@ on CRAN's macOS machines (Apple clang 14, and macOS SDKs before 15.4):
   it (`__cpp_lib_atomic_ref`) and the equivalent GCC/Clang atomic builtin
   otherwise.
 * `std::ranges` algorithms are replaced by their `<algorithm>` equivalents.
+* Template code spells out `typename` before dependent type names and uses
+  `std::conditional_t`, because clang releases before 16 (including Apple
+  clang 14) do not implement C++20's optional `typename`.
+* A lambda that used a structured binding captures it with an init-capture;
+  capturing structured bindings directly also needs clang 16.
+* SimSIMD skips its NEON bf16 kernels with clang releases before 16 (Apple
+  clang before 15), whose `arm_neon.h` declares the bf16 intrinsics only for
+  translation units compiled for bf16. Its portable bf16 kernels are used
+  instead.
 
 LadybugDB and all bundled third-party license files remain inside the source
 archive. Run `Rscript tools/vendor.R` only when intentionally updating the

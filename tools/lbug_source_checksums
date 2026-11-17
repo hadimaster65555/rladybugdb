@@ -4,4 +4,4 @@
 # tools/patches/ladybugdb-cran.patch, the std::format rewrite, and
 # tools/patches/ladybugdb-macos-compat.patch applied.
 lbug-0.20.4.crate fa792a6ec0595098bf41f2f6d243bb705a0d4c01bb94f44e63cc49988796b0e8
-ladybugdb-0.20.4.tar.xz 9d3542fc188105c0b4d2b39bbf826dda0f0d48c5892ae351223ab0d14365732f
+ladybugdb-0.20.4.tar.xz 53b08c831a01cbaa5a005997773c77a846d38afd390e3cf27eae507d27626b07

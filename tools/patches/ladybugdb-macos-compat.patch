@@ -50,6 +50,19 @@ index 7f43e73..b71f9fa 100644
      if (ptr != nullptr) {
          delete static_cast<Database*>(ptr);
      }
+diff --git a/src/function/aggregate_function.cpp b/src/function/aggregate_function.cpp
+index bf36562..2e77040 100644
+--- a/src/function/aggregate_function.cpp
++++ b/src/function/aggregate_function.cpp
+@@ -38,7 +38,7 @@ void AggregateFunctionUtils::appendSumOrAvgFuncs(std::string name, common::Logic
+             LogicalType{inputType},
+             [&]<IntegerTypes T>(T) {
+                 using ResultType =
+-                    std::conditional<UnsignedIntegerTypes<T>, uint128_t, int128_t>::type;
++                    std::conditional_t<UnsignedIntegerTypes<T>, uint128_t, int128_t>;
+                 LogicalTypeID resultType =
+                     UnsignedIntegerTypes<T> ? LogicalTypeID::UINT128 : LogicalTypeID::INT128;
+                 // For avg aggregate functions, the result type is always double.
 diff --git a/src/include/c_api/helpers.h b/src/include/c_api/helpers.h
 index 95d3c94..bdc53d9 100644
 --- a/src/include/c_api/helpers.h
@@ -127,6 +140,49 @@ index 0000000..985961f
 +
 +} // namespace common
 +} // namespace lbug
+diff --git a/src/include/function/aggregate/avg.h b/src/include/function/aggregate/avg.h
+index ba50bd4..7f1c36a 100644
+--- a/src/include/function/aggregate/avg.h
++++ b/src/include/function/aggregate/avg.h
+@@ -19,8 +19,8 @@ struct AvgState : public AggregateStateWithNull {
+     void finalize()
+         requires common::IntegerTypes<T>
+     {
+-        using ResultType = std::conditional<common::SignedIntegerTypes<T>, common::Int128_t,
+-            common::UInt128_t>::type;
++        using ResultType = std::conditional_t<common::SignedIntegerTypes<T>, common::Int128_t,
++            common::UInt128_t>;
+         if (!isNull) {
+             avg = ResultType::template cast<long double>(sum) /
+                   ResultType::template cast<long double>(count);
+diff --git a/src/include/storage/index/hash_index.h b/src/include/storage/index/hash_index.h
+index 61327a4..f13a5de 100644
+--- a/src/include/storage/index/hash_index.h
++++ b/src/include/storage/index/hash_index.h
+@@ -123,7 +123,7 @@ public:
+     // - the key doesn't exist in the local storage, check if the key exists in the persistent
+     // index, if
+     //   so, return false, else insert the key to the local storage.
+-    using InsertType = InMemHashIndex<T>::OwnedType;
++    using InsertType = typename InMemHashIndex<T>::OwnedType;
+     bool insertInternal(const transaction::Transaction* transaction, InsertType&& key,
+         common::offset_t value, visible_func isVisible) {
+         common::offset_t tmpResult = 0;
+diff --git a/src/include/storage/local_storage/local_hash_index.h b/src/include/storage/local_storage/local_hash_index.h
+index 1322464..d68dd01 100644
+--- a/src/include/storage/local_storage/local_hash_index.h
++++ b/src/include/storage/local_storage/local_hash_index.h
+@@ -23,8 +23,8 @@ enum class HashIndexLocalLookupState : uint8_t { KEY_FOUND, KEY_DELETED, KEY_NOT
+ template<typename T>
+ class HashIndexLocalStorage final : public BaseHashIndexLocalStorage {
+ public:
+-    using OwnedType = InMemHashIndex<T>::OwnedType;
+-    using KeyType = InMemHashIndex<T>::KeyType;
++    using OwnedType = typename InMemHashIndex<T>::OwnedType;
++    using KeyType = typename InMemHashIndex<T>::KeyType;
+ 
+     explicit HashIndexLocalStorage(MemoryManager& memoryManager, OverflowFileHandle* handle)
+         : localDeletions{}, localInsertions{memoryManager, handle} {}
 diff --git a/src/storage/compression/compression.cpp b/src/storage/compression/compression.cpp
 index 219136d..8fd7de9 100644
 --- a/src/storage/compression/compression.cpp
@@ -202,6 +258,28 @@ index 83e54e4..c898983 100644
  
      std::vector<EncodedType> integerEncodedValues(numValues);
      for (size_t i = 0; i < numValues; ++i) {
+diff --git a/src/storage/index/in_mem_hash_index.cpp b/src/storage/index/in_mem_hash_index.cpp
+index 0d73c08..77faee1 100644
+--- a/src/storage/index/in_mem_hash_index.cpp
++++ b/src/storage/index/in_mem_hash_index.cpp
+@@ -217,7 +217,7 @@ void InMemHashIndex<T>::reclaimOverflowSlots(SlotIterator iter) {
+ }
+ 
+ template<typename T>
+-InMemHashIndex<T>::InMemSlotType* InMemHashIndex<T>::clearNextOverflowAndAdvanceIter(
++typename InMemHashIndex<T>::InMemSlotType* InMemHashIndex<T>::clearNextOverflowAndAdvanceIter(
+     SlotIterator& iter) {
+     auto originalSlot = iter.slot;
+     auto nextOverflowSlot = iter.slot->header.nextOvfSlotId;
+@@ -258,7 +258,7 @@ uint32_t InMemHashIndex<T>::allocateAOSlot() {
+ }
+ 
+ template<typename T>
+-InMemHashIndex<T>::InMemSlotType* InMemHashIndex<T>::getSlot(const SlotInfo& slotInfo) const {
++typename InMemHashIndex<T>::InMemSlotType* InMemHashIndex<T>::getSlot(const SlotInfo& slotInfo) const {
+     if (slotInfo.slotType == SlotType::PRIMARY) {
+         return &pSlots->operator[](slotInfo.slotId);
+     } else {
 diff --git a/src/storage/table/rel_table.cpp b/src/storage/table/rel_table.cpp
 index 420f909..0b9e512 100644
 --- a/src/storage/table/rel_table.cpp
@@ -234,6 +312,20 @@ index 420f909..0b9e512 100644
          return;
      }
      const auto& srcSelVector = srcNodeIDVector.state->getSelVector();
+diff --git a/src/storage/table/update_info.cpp b/src/storage/table/update_info.cpp
+index 22c9ebb..7414b6e 100644
+--- a/src/storage/table/update_info.cpp
++++ b/src/storage/table/update_info.cpp
+@@ -89,7 +89,8 @@ void UpdateInfo::lookup(const Transaction* transaction, offset_t rowInChunk, Val
+     auto [vectorIdx, rowInVector] =
+         StorageUtils::getQuotientRemainder(rowInChunk, DEFAULT_VECTOR_CAPACITY);
+     bool updated = false;
+-    iterateVectorInfo(transaction, vectorIdx, [&](const VectorUpdateInfo& vectorInfo) {
++    iterateVectorInfo(transaction, vectorIdx,
++        [&, rowInVector = rowInVector](const VectorUpdateInfo& vectorInfo) {
+         if (updated) {
+             return;
+         }
 diff --git a/src/transaction/transaction_manager.cpp b/src/transaction/transaction_manager.cpp
 index 0632295..ca49e6a 100644
 --- a/src/transaction/transaction_manager.cpp
@@ -261,3 +353,28 @@ index 0632295..ca49e6a 100644
          [transactionID](const auto& activeTransaction) {
              return activeTransaction->getID() == transactionID;
          }));
+diff --git a/third_party/simsimd/include/types.h b/third_party/simsimd/include/types.h
+index 3771956..78d7d07 100644
+--- a/third_party/simsimd/include/types.h
++++ b/third_party/simsimd/include/types.h
+@@ -91,8 +91,19 @@
+ #endif // !defined(SIMSIMD_TARGET_NEON_F16) || ...
+ 
+ // Compiling for Arm: SIMSIMD_TARGET_NEON_BF16
++//
++// Before LLVM 16 (Apple clang 15), arm_neon.h declares the BF16 intrinsics only when the
++// whole translation unit targets BF16, so the target-attributed BF16 kernels cannot be
++// compiled with those compilers; the serial BF16 kernels are used instead.
++#if defined(__clang__) && !defined(__ARM_FEATURE_BF16_VECTOR_ARITHMETIC) &&                      \
++    ((defined(__apple_build_version__) && __clang_major__ < 15) ||                                \
++     (!defined(__apple_build_version__) && __clang_major__ < 16))
++#define _SIMSIMD_NEON_BF16_INTRINSICS 0
++#else
++#define _SIMSIMD_NEON_BF16_INTRINSICS 1
++#endif
+ #if !defined(SIMSIMD_TARGET_NEON_BF16) || (SIMSIMD_TARGET_NEON_BF16 && !_SIMSIMD_TARGET_ARM)
+-#if defined(__ARM_NEON)
++#if defined(__ARM_NEON) && _SIMSIMD_NEON_BF16_INTRINSICS
+ #define SIMSIMD_TARGET_NEON_BF16 _SIMSIMD_TARGET_ARM
+ #else
+ #undef SIMSIMD_TARGET_NEON_BF16

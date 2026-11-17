@@ -41,6 +41,13 @@ probe finds `std::format` unavailable, and its `std::ranges` calls use
 `<algorithm>` equivalents. The configure probes now compile in R's C++20
 mode (`CXX20STD`). Other platforms keep using `std::format`.
 
+Compiling the whole engine with clang 14 and 15 also showed seven template
+declarations that need an explicit `typename` and one lambda that captured a
+structured binding (both need clang 16), and SimSIMD's ARM bf16 kernels,
+whose intrinsics `arm_neon.h` provides only from LLVM 16 (Apple clang 15).
+These are fixed in standard C++, and SimSIMD skips the bf16 kernels on older
+clang releases.
+
 On macOS, `configure` also builds the engine for the deployment target that
 R's compiler links the package for (read from a probe object). CMake 3.x
 otherwise targets the host macOS when the SDK is newer than the host, which
