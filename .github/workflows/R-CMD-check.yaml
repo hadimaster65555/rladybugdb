@@ -77,6 +77,18 @@ jobs:
             ' "$check_log" | while IFS= read -r item; do echo "::warning title=R CMD check details::$item"; done
           fi
 
+      - name: Show why the package could not be built
+        if: failure()
+        shell: bash
+        run: |
+          # Only when R CMD check never started (the build failed): rebuild and post
+          # the end of the build output, because job logs need admin rights to read.
+          if [ -z "$(find . -name 00check.log 2>/dev/null | head -n 1)" ]; then
+            R CMD build --no-manual . > build-diagnostic.log 2>&1 || true
+            msg=$(tail -n 60 build-diagnostic.log | awk '{ gsub(/\r/, ""); gsub(/%/, "%25"); printf "%s%%0A", $0 }')
+            echo "::warning title=R CMD build output (last 60 lines)::$msg"
+          fi
+
   # Mirrors the CRAN macOS build machines: CMake is available only as
   # /Applications/CMake.app (not on the PATH), and packages are built for an
   # older macOS deployment target with an older macOS SDK.
