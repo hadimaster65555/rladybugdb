@@ -23,8 +23,8 @@ jobs:
           - {os: ubuntu-24.04-arm, r: release}
           - {os: macos-15-intel, r: release}
           - {os: macos-15-intel, r: oldrel-1}
-          - {os: macos-14, r: release}
-          - {os: macos-14, r: oldrel-1}
+          - {os: macos-15, r: release}
+          - {os: macos-15, r: oldrel-1}
           - {os: windows-latest, r: release}
           - {os: windows-latest, r: oldrel-1}
           - {os: windows-latest, r: devel}
@@ -75,7 +75,7 @@ jobs:
   # older macOS deployment target with an older macOS SDK.
   macos-cran-like:
     name: macOS CRAN-like / ${{ matrix.config.name }}
-    runs-on: macos-14
+    runs-on: macos-15
     strategy:
       fail-fast: false
       matrix:
@@ -127,9 +127,11 @@ jobs:
         if: matrix.config.sdk == '14'
         run: |
           sdk=$(ls -d \
-            /Applications/Xcode_15*.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX14*.sdk \
+            /Applications/Xcode*.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX14*.sdk \
             /Library/Developer/CommandLineTools/SDKs/MacOSX14*.sdk 2>/dev/null | sort | tail -n 1)
           if [ -z "$sdk" ]; then
+            ls -d /Applications/Xcode*.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/*.sdk \
+              /Library/Developer/CommandLineTools/SDKs/*.sdk 2>/dev/null || true
             echo "::error::This runner image has no macOS 14 SDK"
             exit 1
           fi
