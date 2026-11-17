@@ -43,12 +43,45 @@ if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
   exit 1
 fi
 
-if ! command -v cmake >/dev/null 2>&1; then
-  echo "configure: ERROR: CMake 3.15 or newer is required." >&2
+# Writing R Extensions ("Using cmake"): cmake need not be on the PATH, and on
+# macOS it is commonly installed as an application bundle, which is where
+# CRAN's macOS build machines provide it. The CMAKE environment variable, a
+# command name or a full path, overrides the search.
+CMAKE_BIN=''
+if [ -n "${CMAKE:-}" ]; then
+  case "$CMAKE" in
+    */*)
+      if [ -f "$CMAKE" ] && [ -x "$CMAKE" ]; then
+        CMAKE_BIN=$CMAKE
+      fi
+      ;;
+    *)
+      CMAKE_BIN=$(command -v "$CMAKE" 2>/dev/null || true)
+      ;;
+  esac
+  if [ -z "$CMAKE_BIN" ]; then
+    echo "configure: ERROR: CMAKE is set to '${CMAKE}', which is not an executable." >&2
+    exit 1
+  fi
+elif command -v cmake >/dev/null 2>&1; then
+  CMAKE_BIN=$(command -v cmake)
+else
+  for candidate in /Applications/CMake.app/Contents/bin/cmake \
+                   /opt/homebrew/bin/cmake /usr/local/bin/cmake; do
+    if [ -f "$candidate" ] && [ -x "$candidate" ]; then
+      CMAKE_BIN=$candidate
+      break
+    fi
+  done
+fi
+if [ -z "$CMAKE_BIN" ]; then
+  echo "configure: ERROR: CMake 3.15 or newer is required but was not found." >&2
+  echo "configure: Install CMake, or set CMAKE to the full path of the cmake executable." >&2
   exit 1
 fi
+echo "configure: using CMake at ${CMAKE_BIN}."
 
-CMAKE_VERSION=$(cmake --version | sed -n '1s/[^0-9]*\([0-9][0-9.]*\).*/\1/p')
+CMAKE_VERSION=$("$CMAKE_BIN" --version | sed -n '1s/[^0-9]*\([0-9][0-9.]*\).*/\1/p')
 CMAKE_MAJOR=$(printf '%s' "$CMAKE_VERSION" | cut -d. -f1)
 CMAKE_MINOR=$(printf '%s' "$CMAKE_VERSION" | cut -d. -f2)
 if [ -z "$CMAKE_MAJOR" ] || [ -z "$CMAKE_MINOR" ] || \
@@ -86,6 +119,9 @@ CC_CONFIG=$("$R_CONFIG" CMD config CC)
 CXX_CONFIG=$("$R_CONFIG" CMD config CXX20)
 CFLAGS_CONFIG=$("$R_CONFIG" CMD config CFLAGS)
 CXXFLAGS_CONFIG=$("$R_CONFIG" CMD config CXX20FLAGS)
+# The compiler probes below must use R's C++20 mode: some compilers, such as
+# older Apple clang releases, default to an earlier language standard.
+CXX20STD_CONFIG=$("$R_CONFIG" CMD config CXX20STD)
 CPPFLAGS_CONFIG=$("$R_CONFIG" CMD config CPPFLAGS)
 LDFLAGS_CONFIG=$("$R_CONFIG" CMD config LDFLAGS)
 
@@ -148,13 +184,13 @@ int main() {
 EOF
 
 ATOMIC_LIBS=''
-if "$CMAKE_CXX" $CXX_DRIVER_FLAGS $CPPFLAGS_CONFIG $CXXFLAGS_CONFIG \
-    $LDFLAGS_CONFIG "$ATOMIC_TEST_SOURCE" -o "$ATOMIC_TEST_BINARY" \
-    >/dev/null 2>&1; then
+if "$CMAKE_CXX" $CXX_DRIVER_FLAGS $CXX20STD_CONFIG $CPPFLAGS_CONFIG \
+    $CXXFLAGS_CONFIG $LDFLAGS_CONFIG "$ATOMIC_TEST_SOURCE" \
+    -o "$ATOMIC_TEST_BINARY" >/dev/null 2>&1; then
   echo "configure: 16-byte atomics are provided by the C++ toolchain."
-elif "$CMAKE_CXX" $CXX_DRIVER_FLAGS $CPPFLAGS_CONFIG $CXXFLAGS_CONFIG \
-    $LDFLAGS_CONFIG "$ATOMIC_TEST_SOURCE" -o "$ATOMIC_TEST_BINARY" \
-    -latomic >/dev/null 2>&1; then
+elif "$CMAKE_CXX" $CXX_DRIVER_FLAGS $CXX20STD_CONFIG $CPPFLAGS_CONFIG \
+    $CXXFLAGS_CONFIG $LDFLAGS_CONFIG "$ATOMIC_TEST_SOURCE" \
+    -o "$ATOMIC_TEST_BINARY" -latomic >/dev/null 2>&1; then
   ATOMIC_LIBS='-latomic'
   echo "configure: using libatomic for 16-byte atomic operations."
 else
@@ -162,6 +198,53 @@ else
   echo "configure: Install the compiler's libatomic runtime and try again." >&2
   exit 1
 fi
+
+# LadybugDB formats messages with std::format through its
+# common/string_format.h wrapper. Some supported toolchains cannot provide
+# it: Apple clang 14's libc++ has no usable <format>, and newer libc++ marks
+# floating-point formatting unavailable for macOS deployment targets older
+# than 13.3. Those builds use the {fmt} library bundled with the engine.
+# Setting RLADYBUGDB_FMT_FALLBACK to yes or no forces either implementation.
+FORMAT_TEST_SOURCE="${BUILD_ROOT}/format-check.cpp"
+FORMAT_TEST_BINARY="${BUILD_ROOT}/format-check"
+cat > "$FORMAT_TEST_SOURCE" <<'EOF'
+#include <format>
+#include <string>
+#include <string_view>
+#include <utility>
+
+template<typename... Args>
+std::string probeFormat(std::format_string<Args...> formatString, Args&&... args) {
+    return std::format(formatString, std::forward<Args>(args)...);
+}
+
+int main() {
+    const std::string text = probeFormat("{} {:.2f} {}", 42, 2.25, std::string_view("x"));
+    return text == "42 2.25 x" ? 0 : 1;
+}
+EOF
+
+case "${RLADYBUGDB_FMT_FALLBACK:-auto}" in
+  yes|YES|true|TRUE|on|ON|1)
+    LBUG_FMT_FALLBACK=ON
+    echo "configure: using the bundled {fmt} library (requested by RLADYBUGDB_FMT_FALLBACK)."
+    ;;
+  no|NO|false|FALSE|off|OFF|0)
+    LBUG_FMT_FALLBACK=OFF
+    echo "configure: using std::format (requested by RLADYBUGDB_FMT_FALLBACK)."
+    ;;
+  *)
+    if "$CMAKE_CXX" $CXX_DRIVER_FLAGS $CXX20STD_CONFIG $CPPFLAGS_CONFIG \
+        $CXXFLAGS_CONFIG $LDFLAGS_CONFIG "$FORMAT_TEST_SOURCE" \
+        -o "$FORMAT_TEST_BINARY" >/dev/null 2>&1; then
+      LBUG_FMT_FALLBACK=OFF
+      echo "configure: using std::format from the C++ library."
+    else
+      LBUG_FMT_FALLBACK=ON
+      echo "configure: std::format is unavailable for this toolchain; using the bundled {fmt} library."
+    fi
+    ;;
+esac
 
 OS=$(uname -s)
 case "$OS" in
@@ -173,8 +256,34 @@ case "$OS" in
     ;;
 esac
 
+# Build the engine for the macOS deployment target that R's compiler uses
+# when it links the package. Left to itself, CMake 3.x targets the host macOS
+# version whenever the SDK is newer than the host, and the linker then warns
+# that the engine's objects were built for a newer macOS than the package.
+# When MACOSX_DEPLOYMENT_TARGET or -mmacosx-version-min is set, the probe
+# reports that same value.
+OSX_DEPLOYMENT_TARGET=''
+case "$OS" in
+  Darwin*)
+    DEPLOYMENT_TEST_SOURCE="${BUILD_ROOT}/deployment-target.c"
+    DEPLOYMENT_TEST_OBJECT="${BUILD_ROOT}/deployment-target.o"
+    printf 'int rladybugdb_deployment_target(void) { return 0; }\n' \
+      > "$DEPLOYMENT_TEST_SOURCE"
+    if "$CMAKE_CC" $CC_DRIVER_FLAGS $CPPFLAGS_CONFIG $CFLAGS_CONFIG \
+        -c "$DEPLOYMENT_TEST_SOURCE" -o "$DEPLOYMENT_TEST_OBJECT" \
+        >/dev/null 2>&1; then
+      OSX_DEPLOYMENT_TARGET=$(otool -l "$DEPLOYMENT_TEST_OBJECT" 2>/dev/null | awk '
+        $1 == "cmd" && ($2 == "LC_BUILD_VERSION" || $2 == "LC_VERSION_MIN_MACOSX") { found = 1 }
+        found && ($1 == "minos" || $1 == "version") { print $2; exit }')
+    fi
+    if [ -n "$OSX_DEPLOYMENT_TARGET" ]; then
+      echo "configure: building for macOS ${OSX_DEPLOYMENT_TARGET} and later, as R's compiler does."
+    fi
+    ;;
+esac
+
 echo "configure: building LadybugDB v${LBUG_VERSION} from source (maximum 2 jobs)."
-cmake -S "$LBUG_SOURCE" -B "$LBUG_BUILD" \
+"$CMAKE_BIN" -S "$LBUG_SOURCE" -B "$LBUG_BUILD" \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_C_COMPILER="$CMAKE_CC" \
   -DCMAKE_CXX_COMPILER="$CMAKE_CXX" \
@@ -195,8 +304,10 @@ cmake -S "$LBUG_SOURCE" -B "$LBUG_BUILD" \
   -DENABLE_BACKTRACES=OFF \
   -DENABLE_MALLOC_BUFFER_MANAGER="$MALLOC_BUFFER_MANAGER" \
   -DLBUG_ENABLE_SIMD=OFF \
-  -DLBUG_R_PACKAGE=ON
-cmake --build "$LBUG_BUILD" --target lbug --parallel 2
+  -DLBUG_R_PACKAGE=ON \
+  -DLBUG_FMT_FALLBACK="$LBUG_FMT_FALLBACK" \
+  ${OSX_DEPLOYMENT_TARGET:+"-DCMAKE_OSX_DEPLOYMENT_TARGET=$OSX_DEPLOYMENT_TARGET"}
+"$CMAKE_BIN" --build "$LBUG_BUILD" --target lbug --parallel 2
 
 BUILT_LBUG=$(find "$LBUG_BUILD" -type f \( -name liblbug.a -o -name lbug.lib \) \
   | head -n 1)

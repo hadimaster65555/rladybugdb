@@ -13,6 +13,15 @@ license files for ALP, ANTLR4, Brotli, cppjieba/limonp, FastPFOR, LZ4, Mbed TLS,
 miniz, Parquet/Thrift, PCG, pybind11, RE2, CRoaring, SimSIMD, Snappy, spdlog,
 taywee/args, utf8proc, yyjson, and Zstandard.
 
+{fmt} 9.1.0, bundled with spdlog in that archive, is compiled into the package
+on toolchains whose C++ library cannot provide std::format, such as the older
+Apple clang releases on some CRAN macOS machines.
+
+{fmt}
+  Copyright (c) 2012 - present, Victor Zverovich
+  License: MIT (lbug-src/third_party/spdlog/spdlog/fmt/bundled/fmt.license.rst)
+
 The LadybugDB MIT license is also present as lbug-src/LICENSE inside that
 archive. The CRAN portability changes are recorded separately in
-tools/patches/ladybugdb-cran.patch.
+tools/patches/ladybugdb-cran.patch and tools/patches/ladybugdb-macos-compat.patch,
+together with the std::format rewrite performed by tools/vendor.R.

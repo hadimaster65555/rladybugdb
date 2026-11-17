@@ -1,3 +1,27 @@
+# rladybugdb 0.4.5
+
+## CRAN macOS installation
+
+* `configure` now finds CMake when it is not on the `PATH`. It checks the
+  `CMAKE` environment variable, then `PATH`, then
+  `/Applications/CMake.app/Contents/bin/cmake` (where CRAN's macOS machines
+  install it), `/opt/homebrew/bin/cmake`, and `/usr/local/bin/cmake`. This
+  fixes "CMake 3.15 or newer is required" on CRAN's r-release-macos-x86_64,
+  r-oldrel-macos-arm64, and r-oldrel-macos-x86_64 machines.
+* The bundled engine no longer requires `std::atomic_ref`, which is missing
+  from macOS SDKs before 15.4. This fixes the r-release-macos-arm64 build.
+* The bundled engine now builds with Apple clang 14 and with macOS deployment
+  targets older than 13.3. Its `std::format` calls go through a small wrapper
+  that uses the {fmt} library bundled with the engine when a configure probe
+  finds `std::format` unavailable, and its `std::ranges` calls use
+  `<algorithm>` equivalents. Other platforms keep using `std::format`.
+* The configure-time compiler probes now compile in R's C++20 mode
+  (`CXX20STD`), so they no longer depend on the compiler's default standard.
+* On macOS, the bundled engine is now built for the same deployment target
+  that R's compiler links the package for. This avoids linker warnings about
+  objects built for a newer macOS when the SDK is newer than the running
+  system and CMake 3.x is used.
+
 # rladybugdb 0.4.4
 
 ## CRAN documentation
