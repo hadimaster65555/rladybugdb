@@ -1,0 +1,111 @@
+# Temporary diagnostics; remove before merging.
+#
+# R-hub's clang23 container (clang 23 with libc++) crashed in the tests of
+# rladybugdb 0.4.5, while its ubuntu-clang container (the same clang 23 with
+# libstdc++) passed. This runs the crashing scenario under gdb, for 0.4.5 and
+# for CRAN's 0.4.4, in R-hub's two libc++ containers (clang23 and
+# debian-clang), and first checks that a minimal Rcpp function can throw.
+# Results are posted as annotations.
+name: clang libc++ diagnostics
+
+on:
+  push:
+    branches: ['fix/**']
+    paths: ['.github/workflows/clang-diagnostics.yaml']
+
+jobs:
+  diagnose:
+    name: ${{ matrix.container }} / rladybugdb ${{ matrix.package }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    container:
+      image: ghcr.io/r-hub/containers/${{ matrix.container }}:latest
+      options: --cap-add=SYS_PTRACE --security-opt seccomp=unconfined
+    strategy:
+      fail-fast: false
+      matrix:
+        container: [clang23, debian-clang]
+        package: ['0.4.5', '0.4.4']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install xz and gdb
+        shell: bash
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -qq
+          apt-get install -y -qq xz-utils gdb > /dev/null
+          {
+            R --version | head -n 1
+            echo "CXX20 = $(R CMD config CXX20)"
+            echo "CXX20FLAGS = $(R CMD config CXX20FLAGS)"
+            echo "LDFLAGS = $(R CMD config LDFLAGS)"
+            gdb --version | head -n 1
+          } > toolchain.txt
+          cat toolchain.txt
+          echo "::notice title=Toolchain::$(awk '{ gsub(/%/, "%25"); printf "%s%%0A", $0 }' toolchain.txt)"
+
+      - name: Throw from a minimal Rcpp function
+        shell: bash
+        run: |
+          Rscript -e 'pak::pkg_install("Rcpp")' > rcpp-install.log 2>&1 || { tail -n 40 rcpp-install.log; exit 1; }
+          cat > rcpp-throw.R <<'EOF'
+          Rcpp::cppFunction('int rcpp_throw() { Rcpp::stop("thrown from C++"); return 0; }')
+          dlls <- getLoadedDLLs()
+          system(paste("ldd", shQuote(dlls[[length(dlls)]][["path"]])))
+          res <- try(rcpp_throw(), silent = TRUE)
+          cat("caught:", conditionMessage(attr(res, "condition")), "\n")
+          cat("MINIMAL RCPP EXCEPTION: OK\n")
+          EOF
+          R -d gdb --debugger-args="-batch -ex run -ex bt" --no-save --no-restore -f rcpp-throw.R > rcpp-throw.log 2>&1 || true
+          tail -n 60 rcpp-throw.log
+          echo "::warning title=Minimal Rcpp exception::$(tail -n 40 rcpp-throw.log | awk '{ gsub(/\r/, ""); gsub(/%/, "%25"); printf "%s%%0A", $0 }')"
+
+      - name: Install rladybugdb ${{ matrix.package }}
+        shell: bash
+        run: |
+          Rscript -e 'pak::pkg_install(c("DBI", "rlang", "testthat", "withr", "tibble", "bit64"))' > deps.log 2>&1 || { tail -n 40 deps.log; exit 1; }
+          if [ "${{ matrix.package }}" = "0.4.4" ]; then
+            curl -fsSL -o rladybugdb_0.4.4.tar.gz https://cran.r-project.org/src/contrib/Archive/rladybugdb/rladybugdb_0.4.4.tar.gz
+            echo "b81522b20830e46fa6ed17ba84c12e2bcf94c43537047e16f806a0266cc5cbcb  rladybugdb_0.4.4.tar.gz" | sha256sum -c -
+            mkdir -p pkgsrc
+            tar -xzf rladybugdb_0.4.4.tar.gz -C pkgsrc
+            pkgdir=pkgsrc/rladybugdb
+          else
+            pkgdir=.
+          fi
+          echo "$pkgdir" > pkgdir.txt
+          mkdir -p pkglib
+          R CMD INSTALL --library=pkglib "$pkgdir" > install.log 2>&1 || { tail -n 80 install.log; exit 1; }
+          grep '^configure:' install.log
+          ldd pkglib/rladybugdb/libs/rladybugdb.so | tee ldd.txt
+          echo "::notice title=configure and linked libraries::$({ grep '^configure:' install.log; cat ldd.txt; } | awk '{ gsub(/%/, "%25"); printf "%s%%0A", $0 }')"
+
+      - name: Run the crashing scenario and the tests under gdb
+        shell: bash
+        run: |
+          cat > scenario.R <<'EOF'
+          .libPaths(c(normalizePath("pkglib"), .libPaths()))
+          library(rladybugdb)
+          cat("rladybugdb", format(packageVersion("rladybugdb")), "\n")
+          db <- lb_database(":memory:")
+          conn <- lb_connection(db)
+          cat("STEP 1: engine error from an invalid query\n")
+          print(try(lb_execute(conn, "THIS IS NOT CYPHER"), silent = TRUE))
+          cat("STEP 2: lb_close() on a connection with an open result (Rcpp::stop)\n")
+          res <- lb_execute(conn, "RETURN 1 AS x")
+          print(try(lb_close(conn), silent = TRUE))
+          lb_close(res); lb_close(conn); lb_close(db)
+          cat("STEP 3: the package tests\n")
+          testthat::test_dir(file.path(readLines("pkgdir.txt"), "tests", "testthat"),
+                             package = "rladybugdb", load_package = "installed",
+                             reporter = "summary", stop_on_failure = FALSE)
+          cat("ALL STEPS FINISHED\n")
+          EOF
+          R -d gdb --debugger-args="-batch -ex run -ex bt" --no-save --no-restore -f scenario.R > scenario.log 2>&1 || true
+          pattern='STEP|SIGSEGV|SIGABRT|ALL STEPS FINISHED|exited normally|exited with code|FAIL|OK:|Failed:'
+          grep -E "$pattern" scenario.log | head -n 30
+          tail -n 80 scenario.log
+          echo "::warning title=Scenario steps::$(grep -E "$pattern" scenario.log | head -n 30 | awk '{ gsub(/%/, "%25"); printf "%s%%0A", $0 }')"
+          echo "::warning title=Scenario under gdb (last 60 lines)::$(tail -n 60 scenario.log | awk '{ gsub(/\r/, ""); gsub(/%/, "%25"); printf "%s%%0A", $0 }')"
