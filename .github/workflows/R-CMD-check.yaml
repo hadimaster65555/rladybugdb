@@ -2,7 +2,7 @@ name: R CMD check
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, 'fix/**']
   pull_request:
   workflow_dispatch:
 
@@ -22,8 +22,11 @@ jobs:
           - {os: ubuntu-latest, r: devel}
           - {os: ubuntu-24.04-arm, r: release}
           - {os: macos-15-intel, r: release}
+          - {os: macos-15-intel, r: oldrel-1}
           - {os: macos-14, r: release}
+          - {os: macos-14, r: oldrel-1}
           - {os: windows-latest, r: release}
+          - {os: windows-latest, r: oldrel-1}
           - {os: windows-latest, r: devel}
           - {os: windows-11-arm, r: release}
 
@@ -53,3 +56,112 @@ jobs:
           args: 'c("--no-manual", "--as-cran")'
           build_args: 'c("--no-manual")'
           error-on: '"warning"'
+
+      - name: Report installation and check results
+        if: always()
+        shell: bash
+        run: |
+          install_log=$(find check -name 00install.out 2>/dev/null | head -n 1)
+          check_log=$(find check -name 00check.log 2>/dev/null | head -n 1)
+          if [ -n "$install_log" ]; then
+            echo "::notice title=configure::$(grep '^configure:' "$install_log" | awk 'BEGIN { ORS = "%0A" } { print }')"
+          fi
+          if [ -n "$check_log" ]; then
+            echo "::notice title=R CMD check::$(grep -E '^Status:|\.\.\. .*(NOTE|WARNING|ERROR)' "$check_log" | awk 'BEGIN { ORS = "%0A" } { print }')"
+          fi
+
+  # Mirrors the CRAN macOS build machines: CMake is available only as
+  # /Applications/CMake.app (not on the PATH), and packages are built for an
+  # older macOS deployment target with an older macOS SDK.
+  macos-cran-like:
+    name: macOS CRAN-like / ${{ matrix.config.name }}
+    runs-on: macos-14
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - {name: "macOS 14 SDK and target", sdk: "14", target: "14.0"}
+          - {name: "macOS 11 target, bundled fmt", sdk: "", target: "11.0"}
+
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      R_KEEP_PKG_SOURCE: yes
+      _R_CHECK_CRAN_INCOMING_REMOTE_: false
+      MACOSX_DEPLOYMENT_TARGET: ${{ matrix.config.target }}
+      CMAKE_APP_VERSION: 3.31.6
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: release
+          use-public-rspm: true
+
+      - uses: r-lib/actions/setup-pandoc@v2
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::rcmdcheck
+          needs: check
+
+      - name: Provide CMake only as /Applications/CMake.app
+        run: |
+          brew unlink cmake || true
+          if command -v cmake; then
+            echo "::error::cmake is still on the PATH"
+            exit 1
+          fi
+          base="cmake-${CMAKE_APP_VERSION}-macos-universal"
+          url="https://github.com/Kitware/CMake/releases/download/v${CMAKE_APP_VERSION}"
+          curl -fsSLO "${url}/${base}.tar.gz"
+          curl -fsSLO "${url}/cmake-${CMAKE_APP_VERSION}-SHA-256.txt"
+          grep " ${base}.tar.gz\$" "cmake-${CMAKE_APP_VERSION}-SHA-256.txt" | shasum -a 256 -c -
+          tar -xzf "${base}.tar.gz"
+          sudo rm -rf /Applications/CMake.app
+          sudo mv "${base}/CMake.app" /Applications/
+          rm -rf "${base}" "${base}.tar.gz" "cmake-${CMAKE_APP_VERSION}-SHA-256.txt"
+          /Applications/CMake.app/Contents/bin/cmake --version
+
+      - name: Select a macOS 14 SDK
+        if: matrix.config.sdk == '14'
+        run: |
+          sdk=$(ls -d \
+            /Applications/Xcode_15*.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX14*.sdk \
+            /Library/Developer/CommandLineTools/SDKs/MacOSX14*.sdk 2>/dev/null | sort | tail -n 1)
+          if [ -z "$sdk" ]; then
+            echo "::error::This runner image has no macOS 14 SDK"
+            exit 1
+          fi
+          echo "SDKROOT=$sdk" >> "$GITHUB_ENV"
+          echo "Using SDK $sdk"
+
+      - name: Check
+        uses: r-lib/actions/check-r-package@v2
+        with:
+          args: 'c("--no-manual", "--as-cran")'
+          build_args: 'c("--no-manual")'
+          error-on: '"warning"'
+
+      - name: Confirm CMake discovery and formatter selection
+        if: always()
+        run: |
+          log=$(find check -name 00install.out | head -n 1)
+          grep '^configure:' "$log"
+          grep -q 'configure: using CMake at /Applications/CMake.app/Contents/bin/cmake' "$log"
+          if [ "${{ matrix.config.target }}" = "11.0" ]; then
+            grep -q 'using the bundled {fmt} library' "$log"
+          fi
+
+      - name: Report installation and check results
+        if: always()
+        shell: bash
+        run: |
+          install_log=$(find check -name 00install.out 2>/dev/null | head -n 1)
+          check_log=$(find check -name 00check.log 2>/dev/null | head -n 1)
+          if [ -n "$install_log" ]; then
+            echo "::notice title=configure::$(grep '^configure:' "$install_log" | awk 'BEGIN { ORS = "%0A" } { print }')"
+          fi
+          if [ -n "$check_log" ]; then
+            echo "::notice title=R CMD check::$(grep -E '^Status:|\.\.\. .*(NOTE|WARNING|ERROR)' "$check_log" | awk 'BEGIN { ORS = "%0A" } { print }')"
+          fi
