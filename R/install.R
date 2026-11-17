@@ -1,16 +1,13 @@
 #' Install the LadybugDB C library (deprecated)
 #'
-#' This function is deprecated. The C library is now bundled with the package
-#' and no Python installation is required.
+#' This function is deprecated. The C library is built from bundled source
+#' during package installation and no Python installation is required. This
+#' helper only issues a deprecation warning; it does not install any software.
 #'
 #' @param ... Ignored.
 #'
-#' @return Invisible `NULL`.
-#'
-#' @examples
-#' \dontrun{
-#' ladybugdb_install()  # no longer needed
-#' }
+#' @return Invisible `NULL`, called for the side effect of issuing a
+#'   deprecation warning. No software is installed.
 #'
 #' @export
 ladybugdb_install <- function(...) {
@@ -27,7 +24,8 @@ ladybugdb_install <- function(...) {
 #'
 #' Returns `TRUE` if the native LadybugDB C library is loaded and functional.
 #'
-#' @return `TRUE` or `FALSE`.
+#' @return A logical scalar: `TRUE` if the native LadybugDB C library responds
+#'   to a version query, and `FALSE` if that query fails.
 #'
 #' @examples
 #' ladybugdb_is_installed()
@@ -42,7 +40,8 @@ ladybugdb_is_installed <- function() {
 
 #' Return the LadybugDB C library version string
 #'
-#' @return A character string, e.g. `"0.20.4"`.
+#' @return A character string identifying the bundled LadybugDB engine version,
+#'   e.g. `"0.20.4"`.
 #'
 #' @examples
 #' ladybugdb_version()

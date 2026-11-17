@@ -1,6 +1,8 @@
 #' Assert that an object is an lb_connection
 #'
 #' @param conn Object to check.
+#' @return The supplied `lb_connection` object invisibly if it is open.
+#'   Raises a typed error for an invalid or closed connection.
 #' @keywords internal
 .lb_check_conn <- function(conn) {
   if (!inherits(conn, "lb_connection")) {
@@ -81,6 +83,8 @@
 #' and re-throws as a typed R error with class `rladybugdb_error_query`.
 #'
 #' @param expr Expression to evaluate.
+#' @return The value of `expr`, with its class and visibility preserved.
+#'   Raises a typed error if evaluating the expression fails.
 #' @keywords internal
 .lb_handle_error <- function(expr) {
   tryCatch(

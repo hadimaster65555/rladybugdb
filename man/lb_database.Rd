@@ -18,7 +18,9 @@ names are \code{buffer_pool_size}, \code{max_num_threads}, \code{enable_compress
 and \code{enable_default_hash_index} (\code{thread_qos} is also accepted on macOS).}
 }
 \value{
-An \code{lb_database} object.
+An \code{lb_database} list containing a native database pointer, its path,
+read-only flag, and configuration. It represents an open database that
+should be released with \code{\link[=lb_close]{lb_close()}} after its connections are closed.
 }
 \description{
 Creates or opens a LadybugDB database. LadybugDB v0.20.4 can read the

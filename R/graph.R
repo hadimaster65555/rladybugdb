@@ -10,17 +10,27 @@
 #' @param x An `lb_result` object.
 #' @param ... Unused; kept for S3 compatibility.
 #'
-#' @return An [igraph::igraph] object.
+#' @return A directed `igraph` object whose vertices and edges represent the
+#'   nodes and relationships in the query result. Database properties become
+#'   vertex and edge attributes; repeated internal identifiers are deduplicated.
 #'
 #' @examples
-#' \dontrun{
-#' db   <- lb_database(":memory:")
-#' conn <- lb_connection(db)
-#' lb_execute(conn, "CREATE NODE TABLE Person (name STRING, PRIMARY KEY(name))")
-#' lb_execute(conn, "CREATE REL TABLE Knows (FROM Person TO Person)")
-#' lb_execute(conn, "CREATE (:Person {name:'A'})-[:Knows]->(:Person {name:'B'})")
-#' result <- lb_execute(conn, "MATCH (a:Person)-[r:Knows]->(b:Person) RETURN a, r, b")
-#' g <- as_igraph(result)
+#' if (requireNamespace("igraph", quietly = TRUE)) {
+#'   with_lb_connection(":memory:", {
+#'     lb_close(lb_execute(
+#'       conn, "CREATE NODE TABLE Person (name STRING, PRIMARY KEY(name))"
+#'     ))
+#'     lb_close(lb_execute(conn, "CREATE REL TABLE Knows (FROM Person TO Person)"))
+#'     lb_close(lb_execute(
+#'       conn, "CREATE (:Person {name:'A'})-[:Knows]->(:Person {name:'B'})"
+#'     ))
+#'     result <- lb_execute(
+#'       conn, "MATCH (a:Person)-[r:Knows]->(b:Person) RETURN a, r, b"
+#'     )
+#'     graph <- as_igraph(result)
+#'     lb_close(result)
+#'     graph
+#'   }, num_threads = 2)
 #' }
 #'
 #' @export
@@ -32,7 +42,7 @@ as_igraph <- function(x, ...) {
 as_igraph.lb_result <- function(x, ...) {
   if (!requireNamespace("igraph", quietly = TRUE)) {
     rlang::abort(
-      "Package `igraph` is required. Install it with `install.packages('igraph')`.",
+      "Package `igraph` is required for graph conversion.",
       class = "rladybugdb_error_missing_pkg"
     )
   }
@@ -46,7 +56,9 @@ as_igraph.lb_result <- function(x, ...) {
 #' @param x An `lb_result` object.
 #' @param ... Unused.
 #'
-#' @return A [tidygraph::tbl_graph()] object.
+#' @return A `tbl_graph` object, inheriting from `igraph`, whose nodes and
+#'   edges represent the query's nodes and relationships, with their properties
+#'   available as attributes for tidygraph operations.
 #'
 #' @export
 as_tbl_graph <- function(x, ...) {
@@ -57,7 +69,7 @@ as_tbl_graph <- function(x, ...) {
 as_tbl_graph.lb_result <- function(x, ...) {
   if (!requireNamespace("tidygraph", quietly = TRUE)) {
     rlang::abort(
-      "Package `tidygraph` is required. Install it with `install.packages('tidygraph')`.",
+      "Package `tidygraph` is required for tidygraph conversion.",
       class = "rladybugdb_error_missing_pkg"
     )
   }
@@ -75,6 +87,8 @@ as_tbl_graph.lb_result <- function(x, ...) {
 #' `_label` / `properties` are NODE columns; those containing `_src` / `_dst`
 #' are REL columns.
 #'
+#' @return A directed `igraph` object representing the query's nodes and
+#'   relationships, with database properties stored as attributes.
 #' @keywords internal
 .build_igraph <- function(df, column_types = NULL) {
   nodes_list <- list()

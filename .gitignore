@@ -1,13 +1,31 @@
-
 # Local tooling
 .claude/
 .DS_Store
 
+# R session and IDE state
+.Rhistory
+.RData
+.Rproj.user/
+*.Rproj
+
+# R build and check artifacts
+*.Rcheck/
+/*.tar.gz
+src-i386/
+src-x64/
+
 # Vendored C library artifacts (populated by configure or tools/vendor.R)
-src/vendor/include/
-src/vendor/lib/
+src/vendor/
 src/Makevars
+src/Makevars.win
 src/*.o
 src/*.so
 src/*.dll
 src/*.dylib
+src/symbols.rds
+
+# CRAN incoming pre-test logs saved locally for triage
+debian_*.txt
+windows_*.txt
+*_00install.out.txt
+*_00check.log.txt

@@ -25,6 +25,14 @@ installation, the configure script verifies that source archive and compiles a
 static library with R's own C++20 toolchain. No executable code or libraries
 are downloaded during installation.
 
+Installing therefore needs a C++20 compiler and CMake 3.15 or newer. The engine
+is about 1,050 translation units, which the configure script compiles with at
+most two parallel jobs, so plan for roughly 15 to 25 minutes for a first
+install and a few GB of free space in the temporary build directory. The
+installed package itself is small; the intermediate static library is large
+because it carries the debug information R's default flags request. Upgrades
+rebuild the engine, so they cost the same.
+
 ```r
 library(rladybugdb)
 ladybugdb_version()
@@ -227,6 +235,16 @@ The pinned version is stored in `tools/lbug_version`; source checksums are in
 `tools/lbug_source_checksums`. The maintainer script verifies the upstream
 source, applies the documented CRAN portability patch, and recreates the local
 source archive.
+
+The bundled engine is built with the compiler, optimisation, debugging,
+architecture, hardening, and sanitizer settings R reports, but without
+diagnostic-only flags such as `-Wall` and `-pedantic`: the vendored
+third-party sources use documented compiler extensions whose warnings are not
+actionable here. This package's own sources in `src/` are unaffected and are
+still compiled with R's full flags. To reproduce the diagnostics CRAN's Debian
+machines report, point `R_MAKEVARS_USER` at a file setting `CFLAGS` and
+`CXX20FLAGS` to `-g -O2 -Wall -pedantic` and run `R CMD check --as-cran` on
+the built tarball.
 
 Runnable package examples are installed under `inst/examples`.
 

@@ -12,7 +12,9 @@ as_tbl_graph(x, ...)
 \item{...}{Unused.}
 }
 \value{
-A \code{\link[tidygraph:tbl_graph]{tidygraph::tbl_graph()}} object.
+A \code{tbl_graph} object, inheriting from \code{igraph}, whose nodes and
+edges represent the query's nodes and relationships, with their properties
+available as attributes for tidygraph operations.
 }
 \description{
 Convert an lb_result to a tbl_graph (tidygraph)

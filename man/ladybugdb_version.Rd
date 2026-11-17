@@ -7,7 +7,8 @@
 ladybugdb_version()
 }
 \value{
-A character string, e.g. \code{"0.20.4"}.
+A character string identifying the bundled LadybugDB engine version,
+e.g. \code{"0.20.4"}.
 }
 \description{
 Return the LadybugDB C library version string

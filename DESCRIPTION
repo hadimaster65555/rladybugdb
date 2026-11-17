@@ -11,7 +11,6 @@ Description: Provides an R interface to 'LadybugDB', an embedded columnar graph
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.3
 NeedsCompilation: yes
 SystemRequirements: C++20, CMake (>= 3.15)
 Imports:
@@ -35,3 +34,4 @@ Suggests:
 VignetteBuilder: knitr
 URL: https://github.com/hadimaster65555/rladybugdb
 BugReports: https://github.com/hadimaster65555/rladybugdb/issues
+Config/roxygen2/version: 8.1.0

@@ -12,7 +12,8 @@
 \item{...}{Unused.}
 }
 \value{
-A data frame.
+A \code{data.frame} containing all query rows, with one column per
+returned expression. Nested database values are stored in list columns.
 }
 \description{
 Materialization preserves the current streaming cursor, so it is repeatable

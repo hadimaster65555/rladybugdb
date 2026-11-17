@@ -8,7 +8,8 @@
 #' @param value An Arrow Table, RecordBatch, or object accepted by
 #'   `arrow::as_record_batch()`.
 #' @param table Existing target node table name.
-#' @return The COPY query's `lb_result`.
+#' @return An `lb_result` containing the COPY statement's metadata after
+#'   loading the Arrow rows into the target table. Release it with [lb_close()].
 #' @export
 lb_copy_from_arrow <- function(conn, value, table) {
   .lb_check_conn(conn)
@@ -58,7 +59,9 @@ lb_copy_from_arrow <- function(conn, value, table) {
 #' @param conn An `lb_connection`.
 #' @param df A data frame.
 #' @param table Existing target table name.
-#' @return An `lb_result`.
+#' @return An `lb_result` containing the COPY statement's metadata after
+#'   loading the data-frame rows into the target table. Release it with
+#'   [lb_close()].
 #' @export
 lb_copy_from_df <- function(conn, df, table) {
   .lb_check_conn(conn)
@@ -87,7 +90,8 @@ lb_copy_from_df <- function(conn, df, table) {
 #' @param delim One-character delimiter.
 #' @param ... Named COPY options. Values must be scalar logical, numeric, or
 #'   character values; option names are validated identifiers.
-#' @return An `lb_result`.
+#' @return An `lb_result` containing the COPY statement's metadata after
+#'   loading the CSV rows into the target table. Release it with [lb_close()].
 #' @export
 lb_copy_from_csv <- function(conn, path, table, header = TRUE, delim = ",", ...) {
   .lb_check_conn(conn)

@@ -1,10 +1,32 @@
+## Resubmission in response to the documentation review
+
+* Added `\value` sections for `format.lb_interval.Rd` and
+  `LadybugDB-DBI-methods.Rd` through their roxygen `@return` sources and
+  regenerated the manuals. Return documentation now describes output classes,
+  contents, and side effects, including each documented DBI method.
+* Unwrapped the short in-memory examples in `lb_execute.Rd`, `lb_query.Rd`, and
+  `as_igraph.Rd`. The graph example uses `requireNamespace()` for its suggested
+  dependency, and all native results, connections, and databases are closed.
+* Removed the example calling the deprecated `ladybugdb_install()` helper.
+  The helper itself only signals deprecation and installs no software.
+  Removed installation commands from optional-dependency error messages and
+  confirmed that functions, examples, tests, and vignettes contain no calls
+  that install packages or external software.
+* All six example topics run without `\dontrun` or `\donttest`. The final
+  check measured 0.000 to 0.086 seconds elapsed per topic. All 228 tests
+  passed with no warnings or skips; all vignettes and both manuals passed.
+
 ## Test environments
 
 * macOS Tahoe 26.6.2 (aarch64), R 4.6.1, Apple Clang 21.
-* `R CMD check --as-cran rladybugdb_0.4.4.tar.gz` with all Suggests
+* `R CMD check --as-cran --timings rladybugdb_0.4.4.tar.gz` with all Suggests
   installed, run with `CFLAGS` and `CXX20FLAGS` set to `-g -O2 -Wall
   -pedantic` so the diagnostics reported by the Debian pre-test are
   reproduced locally.
+* A fresh source build and installation were checked on 2026-10-02. The
+  online incoming pass repeated the full check using
+  `--install=check:<clean-install-log>` and `--library=<clean-check-library>`
+  against that fresh installation, avoiding another engine compilation.
 
 ## R CMD check results
 
@@ -21,7 +43,7 @@
 New submission
 ```
 
-This is a new submission.
+This is a resubmission of a new package.
 
 ## Changes in response to the 0.4.3 incoming Debian install pre-test
 

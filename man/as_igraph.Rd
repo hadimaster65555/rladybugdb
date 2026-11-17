@@ -12,7 +12,9 @@ as_igraph(x, ...)
 \item{...}{Unused; kept for S3 compatibility.}
 }
 \value{
-An \link[igraph:aaa-igraph-package]{igraph::igraph} object.
+A directed \code{igraph} object whose vertices and edges represent the
+nodes and relationships in the query result. Database properties become
+vertex and edge attributes; repeated internal identifiers are deduplicated.
 }
 \description{
 Extracts node and relationship columns from a LadybugDB query result and
@@ -24,14 +26,22 @@ Node columns must have LadybugDB type \code{NODE} and relationship columns type
 function aborts with an informative error.
 }
 \examples{
-\dontrun{
-db   <- lb_database(":memory:")
-conn <- lb_connection(db)
-lb_execute(conn, "CREATE NODE TABLE Person (name STRING, PRIMARY KEY(name))")
-lb_execute(conn, "CREATE REL TABLE Knows (FROM Person TO Person)")
-lb_execute(conn, "CREATE (:Person {name:'A'})-[:Knows]->(:Person {name:'B'})")
-result <- lb_execute(conn, "MATCH (a:Person)-[r:Knows]->(b:Person) RETURN a, r, b")
-g <- as_igraph(result)
+if (requireNamespace("igraph", quietly = TRUE)) {
+  with_lb_connection(":memory:", {
+    lb_close(lb_execute(
+      conn, "CREATE NODE TABLE Person (name STRING, PRIMARY KEY(name))"
+    ))
+    lb_close(lb_execute(conn, "CREATE REL TABLE Knows (FROM Person TO Person)"))
+    lb_close(lb_execute(
+      conn, "CREATE (:Person {name:'A'})-[:Knows]->(:Person {name:'B'})"
+    ))
+    result <- lb_execute(
+      conn, "MATCH (a:Person)-[r:Knows]->(b:Person) RETURN a, r, b"
+    )
+    graph <- as_igraph(result)
+    lb_close(result)
+    graph
+  }, num_threads = 2)
 }
 
 }

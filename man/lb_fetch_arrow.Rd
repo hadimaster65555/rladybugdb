@@ -12,7 +12,8 @@ lb_fetch_arrow(result, n = Inf)
 \item{n}{Maximum rows to fetch. \code{Inf} fetches all remaining rows.}
 }
 \value{
-An \code{arrow::Table}.
+An \code{arrow::Table} containing up to \code{n} rows from the current cursor
+position. The cursor advances by the number of rows returned.
 }
 \description{
 Fetch a chunk as an Arrow Table

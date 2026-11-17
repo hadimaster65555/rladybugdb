@@ -16,7 +16,9 @@ lb_interrupt(conn)
 timeout.}
 }
 \value{
-Invisible \code{conn}.
+The supplied \code{lb_connection} object invisibly. \code{lb_set_timeout()}
+changes its query timeout; \code{lb_interrupt()} requests interruption of its
+running query.
 }
 \description{
 Configure and interrupt queries

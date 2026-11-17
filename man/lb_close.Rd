@@ -12,7 +12,8 @@ lb_close(x, ...)
 \item{...}{Unused.}
 }
 \value{
-Invisible \code{NULL}.
+Invisible \code{NULL}, called for the side effect of releasing the
+object's native resources.
 }
 \description{
 Closing an object more than once is harmless. A connection cannot be closed

@@ -7,7 +7,9 @@
 #' @param conn Owning `lb_connection`.
 #' @param query Original query text.
 #' @param parent Parent result for a multi-statement query, if any.
-#' @return An `lb_result`.
+#' @return An `lb_result` list containing the native result pointer, its owning
+#'   connection, original query, optional parent result, column names and types,
+#'   and the total row count.
 #' @keywords internal
 new_lb_result <- function(ptr, conn = NULL, query = NULL, parent = NULL) {
   col_names <- tryCatch(lb_result_column_names(ptr), error = function(e) character())
@@ -24,7 +26,11 @@ new_lb_result <- function(ptr, conn = NULL, query = NULL, parent = NULL) {
 #'
 #' @param result An `lb_result`.
 #' @param n Maximum rows to fetch. `Inf` fetches the remainder.
-#' @return A data frame. Repeated calls advance the result cursor.
+#' @return `lb_fetch()` returns a `data.frame` with up to `n` rows from the
+#'   current cursor position and one column per returned expression. Repeated
+#'   calls advance the cursor. `lb_has_next()` returns a logical scalar that is
+#'   `TRUE` when unfetched rows remain. `lb_reset()` returns the supplied
+#'   `lb_result` invisibly after moving its cursor back to the first row.
 #' @export
 lb_fetch <- function(result, n = 10000) {
   .lb_check_result(result)
@@ -54,7 +60,11 @@ lb_reset <- function(result) {
 #' Inspect result metadata
 #'
 #' @param result An `lb_result`.
-#' @return A named list.
+#' @return A named list with character vectors `column_names` and
+#'   `column_types`; numeric scalars `num_columns`, `num_tuples` (total rows),
+#'   and `rows_fetched` (current cursor position); and logical scalars
+#'   `complete` (no unfetched rows remain) and `has_next_result` (another
+#'   statement's result is available).
 #' @export
 lb_result_info <- function(result) {
   .lb_check_result(result)
@@ -64,7 +74,9 @@ lb_result_info <- function(result) {
 #' Return query timing information
 #'
 #' @param result An `lb_result`.
-#' @return A list with compilation and execution times in milliseconds.
+#' @return A named list with numeric scalars `compiling_time_ms` and
+#'   `execution_time_ms`, measuring the query's compilation and execution times
+#'   in milliseconds.
 #' @export
 lb_query_summary <- function(result) {
   .lb_check_result(result)
@@ -74,7 +86,9 @@ lb_query_summary <- function(result) {
 #' Retrieve the next result from a multi-statement query
 #'
 #' @param result An `lb_result`.
-#' @return The next `lb_result`, or `NULL`.
+#' @return An `lb_result` representing the next statement's rows or metadata,
+#'   or `NULL` if no further result is available. Close each returned result
+#'   with [lb_close()].
 #' @export
 lb_next_result <- function(result) {
   .lb_check_result(result)

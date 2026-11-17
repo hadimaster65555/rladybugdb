@@ -1,5 +1,16 @@
 # rladybugdb 0.4.4
 
+## CRAN documentation
+
+* Added return-value documentation for interval formatting and all documented
+  DBI methods, including output classes, contents, and side effects. Clarified
+  return values for result streaming, resource management, and conversions.
+* Unwrapped short in-memory examples, guarded the graph example with
+  `requireNamespace()`, and added explicit result and connection cleanup.
+* Removed the deprecated installation-helper example and installation commands
+  from optional-dependency error messages. Functions, examples, and vignettes
+  do not install packages or external software.
+
 ## CRAN build diagnostics
 
 * The configure script no longer forwards R's diagnostic flags (`-Wall`,

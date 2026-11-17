@@ -3,7 +3,9 @@
 #' @param conn An `lb_connection`.
 #' @param milliseconds Non-negative timeout in milliseconds. Zero disables the
 #'   timeout.
-#' @return Invisible `conn`.
+#' @return The supplied `lb_connection` object invisibly. `lb_set_timeout()`
+#'   changes its query timeout; `lb_interrupt()` requests interruption of its
+#'   running query.
 #' @export
 lb_set_timeout <- function(conn, milliseconds) {
   .lb_check_conn(conn)
@@ -34,7 +36,8 @@ lb_interrupt <- function(conn) {
 #' Transaction control
 #'
 #' @param conn An `lb_connection`.
-#' @return Invisible `conn`.
+#' @return The supplied `lb_connection` object invisibly, after starting,
+#'   committing, or rolling back its transaction, respectively.
 #' @export
 lb_begin <- function(conn) .lb_transaction_command(conn, "BEGIN TRANSACTION")
 
@@ -64,8 +67,13 @@ lb_rollback <- function(conn) .lb_transaction_command(conn, "ROLLBACK")
 #'
 #' @param conn An `lb_connection`.
 #' @param name Official extension name.
-#' @return `lb_list_extensions()` returns a data frame; the mutation helpers
-#'   return an `lb_result`.
+#' @return `lb_list_extensions()` returns a `data.frame` describing the
+#'   official extensions reported by the engine, with one row per extension.
+#'   `lb_load_extension()` returns an `lb_result` containing the LOAD
+#'   statement's metadata; release it with [lb_close()].
+#'   `lb_install_extension()` and `lb_update_extension()` always raise an error
+#'   of class `rladybugdb_error_unsupported` and return no value, because remote
+#'   installation and updates are unavailable in the CRAN build.
 #' @export
 lb_list_extensions <- function(conn) {
   lb_query(conn, "CALL SHOW_OFFICIAL_EXTENSIONS() RETURN *")

@@ -14,7 +14,9 @@ lb_copy_from_df(conn, df, table)
 \item{table}{Existing target table name.}
 }
 \value{
-An \code{lb_result}.
+An \code{lb_result} containing the COPY statement's metadata after
+loading the data-frame rows into the target table. Release it with
+\code{\link[=lb_close]{lb_close()}}.
 }
 \description{
 Uses native Arrow transport when the optional \code{arrow} package is available.

@@ -8,7 +8,7 @@
 \description{
 \if{html}{\figure{logo.png}{options: style='float: right' alt='logo' width='120'}}
 
-Provides an R interface to LadybugDB, an embedded columnar graph database using the Cypher query language. LadybugDB was formerly known as Kuzu. This package uses native Rcpp bindings to the LadybugDB C library, requiring no Python runtime.
+Provides an R interface to 'LadybugDB', an embedded columnar graph database using the 'Cypher' query language. 'LadybugDB' was formerly known as 'Kuzu'. This package uses native 'Rcpp' bindings to the 'LadybugDB' C library, requiring no 'Python' runtime.
 }
 \seealso{
 Useful links:
@@ -23,7 +23,7 @@ Useful links:
 
 Authors:
 \itemize{
-  \item Claude (Anthropic AI assistant)
+  \item Raden Muhammad Hadi \email{hadimaster65555@gmail.com}
 }
 
 }

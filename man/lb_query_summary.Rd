@@ -10,7 +10,9 @@ lb_query_summary(result)
 \item{result}{An \code{lb_result}.}
 }
 \value{
-A list with compilation and execution times in milliseconds.
+A named list with numeric scalars \code{compiling_time_ms} and
+\code{execution_time_ms}, measuring the query's compilation and execution times
+in milliseconds.
 }
 \description{
 Return query timing information
