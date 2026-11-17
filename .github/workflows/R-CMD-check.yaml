@@ -67,7 +67,14 @@ jobs:
             echo "::notice title=configure::$(grep '^configure:' "$install_log" | awk 'BEGIN { ORS = "%0A" } { print }')"
           fi
           if [ -n "$check_log" ]; then
-            echo "::notice title=R CMD check::$(grep -E '^Status:|\.\.\. .*(NOTE|WARNING|ERROR)' "$check_log" | awk 'BEGIN { ORS = "%0A" } { print }')"
+            echo "::notice title=R CMD check::$(grep -E '^Status:|used C\+\+ compiler|used SDK|\.\.\. .*(NOTE|WARNING|ERROR)' "$check_log" | awk 'BEGIN { ORS = "%0A" } { print }')"
+            # Full text of each NOTE, WARNING or ERROR (at most 8), one annotation each.
+            awk '
+              function flush() { if (keep && n < 8) { print block; n++ }; keep = 0 }
+              /^\* / { flush(); line = $0; gsub(/%/, "%25", line); block = line; keep = ($0 ~ /\.\.\. .*(NOTE|WARNING|ERROR)$/); next }
+              keep { line = $0; gsub(/%/, "%25", line); block = block "%0A" line }
+              END { flush() }
+            ' "$check_log" | while IFS= read -r item; do echo "::warning title=R CMD check details::$item"; done
           fi
 
   # Mirrors the CRAN macOS build machines: CMake is available only as
@@ -165,5 +172,12 @@ jobs:
             echo "::notice title=configure::$(grep '^configure:' "$install_log" | awk 'BEGIN { ORS = "%0A" } { print }')"
           fi
           if [ -n "$check_log" ]; then
-            echo "::notice title=R CMD check::$(grep -E '^Status:|\.\.\. .*(NOTE|WARNING|ERROR)' "$check_log" | awk 'BEGIN { ORS = "%0A" } { print }')"
+            echo "::notice title=R CMD check::$(grep -E '^Status:|used C\+\+ compiler|used SDK|\.\.\. .*(NOTE|WARNING|ERROR)' "$check_log" | awk 'BEGIN { ORS = "%0A" } { print }')"
+            # Full text of each NOTE, WARNING or ERROR (at most 8), one annotation each.
+            awk '
+              function flush() { if (keep && n < 8) { print block; n++ }; keep = 0 }
+              /^\* / { flush(); line = $0; gsub(/%/, "%25", line); block = line; keep = ($0 ~ /\.\.\. .*(NOTE|WARNING|ERROR)$/); next }
+              keep { line = $0; gsub(/%/, "%25", line); block = block "%0A" line }
+              END { flush() }
+            ' "$check_log" | while IFS= read -r item; do echo "::warning title=R CMD check details::$item"; done
           fi
