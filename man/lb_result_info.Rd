@@ -10,7 +10,11 @@ lb_result_info(result)
 \item{result}{An \code{lb_result}.}
 }
 \value{
-A named list.
+A named list with character vectors \code{column_names} and
+\code{column_types}; numeric scalars \code{num_columns}, \code{num_tuples} (total rows),
+and \code{rows_fetched} (current cursor position); and logical scalars
+\code{complete} (no unfetched rows remain) and \code{has_next_result} (another
+statement's result is available).
 }
 \description{
 Inspect result metadata

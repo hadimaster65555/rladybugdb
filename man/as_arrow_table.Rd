@@ -12,7 +12,8 @@ as_arrow_table(x, ...)
 \item{...}{Unused.}
 }
 \value{
-An \code{arrow::Table} backed by LadybugDB's Arrow C Data export.
+An \code{arrow::Table} containing all query rows and columns, backed by
+LadybugDB's Arrow C Data export. The streaming cursor is preserved.
 }
 \description{
 Convert a LadybugDB result to an Arrow Table

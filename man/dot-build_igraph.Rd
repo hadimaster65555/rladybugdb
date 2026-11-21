@@ -6,6 +6,10 @@
 \usage{
 .build_igraph(df, column_types = NULL)
 }
+\value{
+A directed \code{igraph} object representing the query's nodes and
+relationships, with database properties stored as attributes.
+}
 \description{
 Heuristic: columns whose values are named lists containing \verb{_id} /
 \verb{_label} / \code{properties} are NODE columns; those containing \verb{_src} / \verb{_dst}

@@ -12,7 +12,9 @@ lb_connection(database, num_threads = NULL)
 \item{num_threads}{Positive integer execution thread limit, or \code{NULL}.}
 }
 \value{
-An \code{lb_connection} object.
+An \code{lb_connection} list containing a native connection pointer and
+its owning database. Use it to execute queries, and release it with
+\code{\link[=lb_close]{lb_close()}} after its results are closed.
 }
 \description{
 Open a connection to a LadybugDB database

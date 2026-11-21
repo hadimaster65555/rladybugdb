@@ -34,7 +34,8 @@ methods::setClass(
 
 #' Create a LadybugDB DBI driver
 #'
-#' @return A `LadybugDriver`.
+#' @return A `LadybugDriver` S4 object, inheriting from `DBIDriver`, for use with
+#'   [DBI::dbConnect()] to open a LadybugDB database.
 #' @export
 Ladybug <- function() methods::new("LadybugDriver", state = new.env(parent = emptyenv()))
 

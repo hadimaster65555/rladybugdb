@@ -9,6 +9,10 @@
 \arguments{
 \item{conn}{Object to check.}
 }
+\value{
+The supplied \code{lb_connection} object invisibly if it is open.
+Raises a typed error for an invalid or closed connection.
+}
 \description{
 Assert that an object is an lb_connection
 }

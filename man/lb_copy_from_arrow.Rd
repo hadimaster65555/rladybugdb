@@ -15,7 +15,8 @@ lb_copy_from_arrow(conn, value, table)
 \item{table}{Existing target node table name.}
 }
 \value{
-The COPY query's \code{lb_result}.
+An \code{lb_result} containing the COPY statement's metadata after
+loading the Arrow rows into the target table. Release it with \code{\link[=lb_close]{lb_close()}}.
 }
 \description{
 Registers a temporary Arrow-backed table through the Arrow C Data Interface,

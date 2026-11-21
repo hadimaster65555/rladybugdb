@@ -18,7 +18,11 @@ lb_reset(result)
 \item{n}{Maximum rows to fetch. \code{Inf} fetches the remainder.}
 }
 \value{
-A data frame. Repeated calls advance the result cursor.
+\code{lb_fetch()} returns a \code{data.frame} with up to \code{n} rows from the
+current cursor position and one column per returned expression. Repeated
+calls advance the cursor. \code{lb_has_next()} returns a logical scalar that is
+\code{TRUE} when unfetched rows remain. \code{lb_reset()} returns the supplied
+\code{lb_result} invisibly after moving its cursor back to the first row.
 }
 \description{
 Fetch rows from a LadybugDB result

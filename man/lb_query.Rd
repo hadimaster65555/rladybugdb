@@ -17,7 +17,8 @@ lb_query(conn, query, parameters = NULL, ...)
 \item{...}{Passed to \code{\link[=as.data.frame.lb_result]{as.data.frame.lb_result()}}.}
 }
 \value{
-A \code{data.frame}.
+A \code{data.frame} containing all query rows, with one column per
+returned expression. The underlying native result is closed automatically.
 }
 \description{
 Convenience wrapper around \code{\link[=lb_execute]{lb_execute()}} that immediately converts the
@@ -25,12 +26,13 @@ result to an R \code{data.frame}. Equivalent to
 \code{as.data.frame(lb_execute(conn, query, ...))}.
 }
 \examples{
-\dontrun{
-db   <- lb_database(":memory:")
-conn <- lb_connection(db)
-lb_execute(conn, "CREATE NODE TABLE Person (name STRING, age INT64, PRIMARY KEY(name))")
-lb_execute(conn, "CREATE (:Person {name: 'Alice', age: 30})")
-df <- lb_query(conn, "MATCH (p:Person) RETURN p.name, p.age")
-}
+with_lb_connection(":memory:", {
+  lb_close(lb_execute(
+    conn,
+    "CREATE NODE TABLE Person (name STRING, age INT64, PRIMARY KEY(name))"
+  ))
+  lb_close(lb_execute(conn, "CREATE (:Person {name: 'Alice', age: 30})"))
+  lb_query(conn, "MATCH (p:Person) RETURN p.name AS name, p.age AS age")
+}, num_threads = 2)
 
 }

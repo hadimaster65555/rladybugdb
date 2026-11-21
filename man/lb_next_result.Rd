@@ -10,7 +10,9 @@ lb_next_result(result)
 \item{result}{An \code{lb_result}.}
 }
 \value{
-The next \code{lb_result}, or \code{NULL}.
+An \code{lb_result} representing the next statement's rows or metadata,
+or \code{NULL} if no further result is available. Close each returned result
+with \code{\link[=lb_close]{lb_close()}}.
 }
 \description{
 Retrieve the next result from a multi-statement query

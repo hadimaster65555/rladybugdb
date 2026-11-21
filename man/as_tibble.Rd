@@ -12,7 +12,8 @@ as_tibble(x, ...)
 \item{...}{Passed to \code{\link[=as.data.frame]{as.data.frame()}}.}
 }
 \value{
-A tibble.
+A tibble (classes \code{tbl_df}, \code{tbl}, and \code{data.frame}) containing all
+query rows, with one column per returned expression.
 }
 \description{
 Convert a LadybugDB result to a tibble

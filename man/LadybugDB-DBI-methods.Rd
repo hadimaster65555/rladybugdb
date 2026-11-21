@@ -36,6 +36,54 @@
 \alias{show,LadybugDriver-method}
 \alias{show,LadybugResult-method}
 \title{LadybugDB DBI methods}
+\value{
+The return value depends on the DBI method:
+\itemize{
+\item \code{dbConnect()} returns a \code{LadybugConnection} S4 object, inheriting from
+\code{DBIConnection}, that owns an open database and native connection.
+\item \code{dbSendQuery()} and \code{dbSendStatement()} return a \code{LadybugResult} S4 object,
+inheriting from \code{DBIResult}, representing an executed statement or a
+parameterized statement awaiting \code{dbBind()}.
+\item \code{dbBind()} returns the supplied \code{LadybugResult} invisibly after executing
+the statement with the supplied parameters and resetting its fetch cursor.
+\item \code{dbFetch()} and \code{dbGetQuery()} return a \code{data.frame} with one column per
+returned expression and one row per query record. \code{dbFetch()} advances the
+cursor; \code{dbGetQuery()} fetches all rows and clears its result.
+\item \code{dbExecute()} and \code{dbGetRowsAffected()} return the numeric scalar \code{0}.
+The engine does not expose an affected-row count, so this value does not
+indicate how many rows were changed.
+\item \code{dbGetRowCount()} returns a numeric scalar counting rows fetched since
+the result was created or most recently bound.
+\item \code{dbColumnInfo()} returns a \code{data.frame} with character columns \code{name} and
+\code{type}, giving each result column's name and LadybugDB type.
+\item \code{dbGetInfo()} returns a named list. For a driver, \code{driver.version} and
+\code{client.version} are character strings identifying the package and engine
+versions. For a connection, \code{dbname}, \code{bigint}, and \code{serverVersion} are
+character strings describing its path, integer conversion policy, and
+engine version; \code{read.only} and \code{valid} are logical scalars. For a result,
+\code{statement} is the Cypher string, \code{row.count} is the numeric fetched-row
+count, and \code{completed} is a logical scalar. An unbound result also has
+\code{pending = TRUE}; an executed, valid result also includes the metadata
+described by \code{\link[=lb_result_info]{lb_result_info()}}.
+\item \code{dbIsValid()}, \code{dbHasCompleted()}, and \code{dbIsReadOnly()} return a logical
+scalar indicating whether the object is usable, fetching is complete, or
+the database was opened read-only, respectively. Drivers are always valid.
+\item \code{dbExistsTable()} returns a logical vector indicating whether each
+supplied table name exists.
+\item \code{dbListTables()} and \code{dbListFields()} return character vectors of table
+names and field names, respectively; an empty vector means none were found.
+\item \code{dbDataType()} returns a character string naming the LadybugDB type for
+an R vector, or a named character vector of types for data-frame columns.
+\item \code{dbQuoteIdentifier()} and \code{dbQuoteString()} return \code{DBI::SQL} objects
+containing quoted identifiers or string literals, with the same length
+as the input character vector.
+\item \code{dbDisconnect()}, \code{dbClearResult()}, \code{dbBegin()}, \code{dbCommit()},
+\code{dbRollback()}, and \code{dbUnloadDriver()} return the logical scalar \code{TRUE}
+after successfully releasing resources or completing transaction control.
+\item \code{show()} returns invisible \code{NULL}, called for the side effect of
+displaying a summary of the driver, connection, or result.
+}
+}
 \description{
 LadybugDB implements the standard DBI lifecycle, query, binding, fetch,
 transaction, quoting, and table-metadata generics. LadybugDB's native schema

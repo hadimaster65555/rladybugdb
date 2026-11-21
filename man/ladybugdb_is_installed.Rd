@@ -7,7 +7,8 @@
 ladybugdb_is_installed()
 }
 \value{
-\code{TRUE} or \code{FALSE}.
+A logical scalar: \code{TRUE} if the native LadybugDB C library responds
+to a version query, and \code{FALSE} if that query fails.
 }
 \description{
 Returns \code{TRUE} if the native LadybugDB C library is loaded and functional.

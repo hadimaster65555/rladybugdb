@@ -15,7 +15,9 @@ lb_execute(conn, query, parameters = NULL)
 \code{NULL} (default) means no parameters.}
 }
 \value{
-An object of class \code{lb_result}.
+An \code{lb_result} list containing a native result pointer, its owning
+connection, query text, column names and types, and row count. It represents
+query rows or statement metadata and must be released with \code{\link[=lb_close]{lb_close()}}.
 }
 \description{
 Sends a Cypher query string to LadybugDB and returns an \code{lb_result} object.
@@ -23,12 +25,14 @@ For DDL or DML statements (CREATE TABLE, CREATE, MERGE, …) the result
 contains metadata; for MATCH/RETURN it contains rows.
 }
 \examples{
-\dontrun{
-db   <- lb_database(":memory:")
-conn <- lb_connection(db)
-lb_execute(conn, "CREATE NODE TABLE Person (name STRING, PRIMARY KEY(name))")
-lb_execute(conn, "CREATE (:Person {name: $name})",
-           parameters = list(name = "Alice"))
-}
+with_lb_connection(":memory:", {
+  lb_close(lb_execute(
+    conn, "CREATE NODE TABLE Person (name STRING, PRIMARY KEY(name))"
+  ))
+  result <- lb_execute(conn, "CREATE (:Person {name: $name})",
+                       parameters = list(name = "Alice"))
+  print(result)
+  lb_close(result)
+}, num_threads = 2)
 
 }

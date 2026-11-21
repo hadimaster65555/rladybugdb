@@ -16,7 +16,8 @@ lb_rollback(conn)
 \item{conn}{An \code{lb_connection}.}
 }
 \value{
-Invisible \code{conn}.
+The supplied \code{lb_connection} object invisibly, after starting,
+committing, or rolling back its transaction, respectively.
 }
 \description{
 Transaction control

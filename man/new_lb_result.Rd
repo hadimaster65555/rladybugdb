@@ -16,7 +16,9 @@ new_lb_result(ptr, conn = NULL, query = NULL, parent = NULL)
 \item{parent}{Parent result for a multi-statement query, if any.}
 }
 \value{
-An \code{lb_result}.
+An \code{lb_result} list containing the native result pointer, its owning
+connection, original query, optional parent result, column names and types,
+and the total row count.
 }
 \description{
 A native query result with an independent, resettable cursor. Results keep

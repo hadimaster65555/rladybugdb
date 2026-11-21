@@ -1,129 +1,116 @@
+## Resubmission after archival
+
+rladybugdb 0.4.4 was archived on 2026-11-06 because installation errors on
+the four CRAN macOS flavors were not corrected in time. Version 0.4.5 fixes
+those errors. It makes no other functional changes; all other flavors were
+OK for 0.4.4. The only other change declares ggplot2 and dplyr, which one
+vignette loads, in Suggests.
+
+### r-release-macos-x86_64, r-oldrel-macos-arm64, r-oldrel-macos-x86_64
+
+```
+configure: ERROR: CMake 3.15 or newer is required.
+```
+
+`configure` only looked for `cmake` on the `PATH`. As described in "Writing R
+Extensions" (Using cmake), it now checks the `CMAKE` environment variable,
+then the `PATH`, then `/Applications/CMake.app/Contents/bin/cmake`,
+`/opt/homebrew/bin/cmake`, and `/usr/local/bin/cmake`, and reports the CMake
+it uses in the installation log. This also addresses the M1mac additional
+issue, which failed the same way.
+
+### r-release-macos-arm64
+
+```
+src/c_api/connection.cpp:110: error: no member named 'atomic_ref' in namespace 'std'
+```
+
+The bundled LadybugDB source used `std::atomic_ref`, which libc++ provides
+only from LLVM 19 (macOS SDK 15.4); this machine uses the macOS 14 SDK. The
+vendored source now uses `std::atomic_ref` only when `__cpp_lib_atomic_ref`
+is defined, and the equivalent GCC/Clang atomic builtin otherwise.
+
+### Toolchains that never reached compilation
+
+The three flavors that failed in `configure` use Apple clang 14 and build
+for macOS 11. Their C++ library has no usable `std::format`, newer libc++
+marks floating-point formatting unavailable for targets older than macOS
+13.3, and `std::ranges` is incomplete there. The bundled engine now calls
+`std::format` through a small wrapper that falls back to the {fmt} library
+already contained in the engine source when a configure compile-and-link
+probe finds `std::format` unavailable, and its `std::ranges` calls use
+`<algorithm>` equivalents. The configure probes now compile in R's C++20
+mode (`CXX20STD`). Other platforms keep using `std::format`.
+
+Compiling the whole engine with clang 14 and 15 also showed seven template
+declarations that need an explicit `typename` and one lambda that captured a
+structured binding (both need clang 16), and SimSIMD's ARM bf16 kernels,
+whose intrinsics `arm_neon.h` provides only from LLVM 16 (Apple clang 15).
+These are fixed in standard C++, and SimSIMD skips the bf16 kernels on older
+clang releases.
+
+On macOS, `configure` also builds the engine for the deployment target that
+R's compiler links the package for (read from a probe object). CMake 3.x
+otherwise targets the host macOS when the SDK is newer than the host, which
+produced `ld` warnings about objects built for a newer macOS in local tests.
+
+All changes to the vendored engine are recorded in
+`tools/patches/ladybugdb-macos-compat.patch` and reproduced from the pinned
+upstream crate by `tools/vendor.R`; {fmt} is credited in `inst/COPYRIGHTS`.
+
 ## Test environments
 
-* macOS Tahoe 26.6.2 (aarch64), R 4.6.1, Apple Clang 21.
-* `R CMD check --as-cran rladybugdb_0.4.4.tar.gz` with all Suggests
-  installed, run with `CFLAGS` and `CXX20FLAGS` set to `-g -O2 -Wall
-  -pedantic` so the diagnostics reported by the Debian pre-test are
-  reproduced locally.
+Local, macOS 26.6.2 (arm64), `R CMD check --as-cran` of the built tarball:
+
+* R 4.6.1 (CRAN's arm64 build), Apple clang 21, with CMake available only
+  as `/Applications/CMake.app` (not on the `PATH`), as on CRAN's macOS
+  machines: `configure` found CMake.app and selected `std::format`; 1 NOTE
+  (archived package); tests, examples, vignettes, and both manuals OK.
+* R 4.5.2 (CRAN's big-sur arm64 build, as on r-oldrel-macos-arm64) with
+  LLVM clang 14.0.6 and its libc++, the open-source counterpart of Apple
+  clang 14.0.0 (Apple's Command Line Tools 14.2 were not available here),
+  the macOS 15.4 SDK, and a macOS 11 deployment target, again with CMake
+  only as CMake.app: `configure` selected the bundled {fmt}; 1 NOTE
+  (archived package); tests OK.
+* LLVM clang 15.0.7 and its libc++ (the counterpart of Apple clang 14.0.3,
+  CRAN's x86_64 macOS compiler), x86_64, macOS 11 target: the bundled engine
+  and the package's own sources compile without errors or warnings
+  (compilation only).
+
+GitHub Actions:
+
+* macOS 15 runner building with the macOS 14 SDK and
+  `MACOSX_DEPLOYMENT_TARGET=14.0`, with Homebrew's cmake removed and
+  CMake.app installed (the r-release-macos-arm64 setup): OK, using
+  `std::format` and the atomic builtin in place of `std::atomic_ref`.
+* The same with `MACOSX_DEPLOYMENT_TARGET=11.0`: OK, using the bundled {fmt}.
+* macOS arm64 and x86_64 (R release and oldrel-1), Ubuntu x86_64 (R release,
+  oldrel-1, and devel), Ubuntu arm64 (R release), and Windows (R release,
+  oldrel-1, and devel): OK.
+
+R-hub:
+
+* linux (R-devel), ubuntu-release, ubuntu-next (R-patched), and ubuntu-clang
+  (clang 23.1.6 with libstdc++): OK.
+* gcc16 (Fedora 44, GCC 16.2.1): installs and passes the tests. With that
+  container's `-O3`, GCC 16 reports `-Warray-bounds` inside libstdc++'s
+  `std::sort` in one unchanged file of the bundled engine; with the `-g -O2`
+  flags of CRAN's fedora-gcc, GCC 16.2.0 gives no warnings for that file.
+* clang23 (clang 23.1.6 with libc++): installs, but the tests segfault inside
+  `demangle()` in Rcpp.so when the first `Rcpp::stop()` records its stack
+  trace, because the `std::string` built by libc++ code is read there with
+  libstdc++'s layout. Version 0.4.4 fails identically in that container. In
+  R-hub's debian-clang image (clang 23 and libc++, every package built from
+  source), the test suite of 0.4.5 passes.
+
+win-builder (R-devel, R-release, and R-oldrelease): OK.
+
+mac-builder was unavailable (HTTP 502) from 2026-11-15 to 2026-11-19, so the
+macOS results above come from the local and GitHub Actions runs.
 
 ## R CMD check results
 
 0 errors | 0 warnings | 1 note
 
-## Additional portability verification
-
-* Debian-based Linux container (aarch64), Clang 19.1.7: focused C++20
-  16-byte atomic link and runtime-load test.
-
-## NOTE: CRAN incoming feasibility
-
-```
-New submission
-```
-
-This is a new submission.
-
-## Changes in response to the 0.4.3 incoming Debian install pre-test
-
-The Debian R-devel pre-test using Clang 23.1.1 installed the package
-successfully, but `00install.out` contained significant warnings
-(`-Wgnu-anonymous-struct` and `-Wnested-anon-types`) from the bundled RE2
-sources in the vendored LadybugDB tree.
-
-The configure script forwarded R's configured compiler flags unchanged to the
-CMake build of the bundled engine, so `-Wall -pedantic` was applied to
-third-party code that intentionally uses compiler extensions. Those diagnostics
-are not actionable in this package. Configure now removes diagnostic-only flags
-(`-Wall`, `-Wextra`, `-W`, `-pedantic`, `-Wpedantic`, `-pedantic-errors`,
-`-Weverything`) before passing R's flags to the bundled build. Every other
-configured flag, including optimisation, debugging, architecture, hardening
-(for example `-Wp,-D_FORTIFY_SOURCE=3`), linker, and sanitizer settings, is
-still passed through unchanged. This package's own sources in `src/` are
-unaffected and continue to compile with R's full flags, including `-pedantic`,
-through `src/Makevars`.
-
-No warning suppression flags were added, so the build does not depend on
-compiler-specific `-Wno-*` options.
-
-## Changes in response to the 0.4.2 incoming Debian install pre-test
-
-The Debian R-devel pre-test using Clang 23.1.1 compiled LadybugDB to 100% and
-linked `rladybugdb.so`, but the temporary-load test then failed with an
-unresolved `__atomic_compare_exchange` symbol. LadybugDB uses a 16-byte
-`std::atomic<EvictionCandidate>`; Debian Clang implements this operation using
-the compiler's `libatomic` runtime, which was absent from the final package
-link command.
-
-The configure script now compiles and links a small C++20 executable using the
-same compiler and flags reported by R. It first tests the 16-byte atomic
-operation without an additional library, then retries with `-latomic` if
-needed. The detected library is placed after the static LadybugDB archive in
-`PKG_LIBS`. Configuration fails early with a specific diagnostic if neither
-link succeeds.
-
-A focused Debian-based Linux Clang test reproduced the unresolved symbol
-without `-latomic`; the same executable linked and ran successfully with `-latomic`
-and resolved `libatomic.so.1`. On the macOS test system, the operation is
-provided natively and the package correctly avoids adding `-latomic`. The full
-check reported above completed successfully, including installation, loading,
-compiled-code inspection, and tests.
-
-## Changes in response to the 0.4.1 incoming install pre-tests
-
-The Debian R-devel pre-test used Clang 23 and found that the bundled Thrift
-transport header used `uint8_t` and `uint32_t` without directly including the
-standard fixed-width integer header. The vendored source patch now includes
-`<stdint.h>` before those declarations.
-
-The Windows R-devel pre-test used Rtools/MinGW and exposed two upstream
-compiler-assumption issues. CRoaring's C inline definition produced an external
-symbol that collided with the C++ translation unit's definition of
-`roaring_bitmap_contains`, and LadybugDB selected the MSVC-only
-`_set_se_translator` API for every `_WIN32` compiler. The vendored source patch
-now gives the affected CRoaring inline function internal linkage on MinGW,
-omits the corresponding external-inline declaration there, and restricts the
-structured-exception translator to `_MSC_VER` builds. The package configure
-script also enables LadybugDB's malloc-backed buffer manager on
-MINGW/MSYS/CYGWIN, so Rtools does not depend on MSVC structured exception
-handling.
-
-The source archive and checksum manifest were regenerated after applying these
-patches. A fresh build from the resulting archive and the check reported above
-both completed successfully; in particular:
-
-```
-* checking whether package 'rladybugdb' can be installed ... OK
-* checking compiled code ... OK
-* checking tests ... OK
-```
-
-## Changes in response to the 0.4.0 incoming pre-test
-
-The 0.4.0 incoming pre-test reported unsafe symbols in precompiled upstream
-LadybugDB and OpenSSL libraries. Version 0.4.1 no longer downloads or ships
-precompiled libraries or runtime DLLs.
-
-The package now contains the LadybugDB 0.20.4 source archive and builds a
-static library during installation with CMake and R's configured C/C++
-toolchain. The archive has a pinned SHA-256 checksum, and the reproducible
-vendoring procedure and CRAN-specific source patch are included under
-`tools/`. The source patch removes or disables native code paths that call
-`abort`, `exit`, the system RNG, or write directly to stdout/stderr. Native
-remote-extension installation is disabled in the CRAN build, so OpenSSL and
-the upstream HTTP client are not linked.
-
-The resulting package installs one shared library and no third-party runtime
-DLLs. In the check reported above, both relevant checks now pass:
-
-```
-* checking compilation flags in Makevars ... OK
-* checking compiled code ... OK
-```
-
-All examples, tests, vignettes, and the PDF and HTML manuals also pass. The
-source package contains no `.o`, `.a`, `.so`, `.dll`, `.dylib`, or executable
-files.
-
-The source tarball is 8.7 MB. A clean native installation took approximately
-14 minutes elapsed on the macOS test system. The build performs no network
-access and is deliberately limited to at most two parallel compile jobs.
+* New submission. Package was archived on CRAN (Archived on 2026-11-06 as
+  issues were not corrected in time); this version fixes those issues.

@@ -1,0 +1,380 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 8fceada..29da7d7 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -369,6 +369,7 @@ option(BUILD_LBUG "Build Lbug." TRUE)
+ option(BUILD_SHARED_LBUG "Build the shared liblbug library." TRUE)
+ option(BUILD_STATIC_LBUG "Build the bundled static liblbug archive." TRUE)
+ option(LBUG_R_PACKAGE "Build the CRAN-safe static library used by rladybugdb." FALSE)
++option(LBUG_FMT_FALLBACK "Use the bundled {fmt} library when the C++ library lacks a usable <format>." FALSE)
+ option(LBUG_API_USE_PRECOMPILED_LIB "Link language bindings against a precompiled static liblbug archive." FALSE)
+ set(LBUG_API_PRECOMPILED_LIB_PATH "" CACHE FILEPATH "Path to the precompiled static liblbug archive used by language bindings.")
+ option(LBUG_NODEJS_USE_PRECOMPILED_LIB "Deprecated alias for LBUG_API_USE_PRECOMPILED_LIB." FALSE)
+@@ -490,6 +491,11 @@ include_directories(third_party/pcg)
+ include_directories(third_party/lz4)
+ include_directories(third_party/roaring_bitmap)
+ include_directories(SYSTEM third_party/simsimd/include)
++if (LBUG_FMT_FALLBACK)
++    # common/string_format.h uses the header-only {fmt} bundled with spdlog.
++    include_directories(third_party/spdlog)
++    add_compile_definitions(LBUG_FMT_FALLBACK)
++endif ()
+ 
+ add_subdirectory(third_party)
+ 
+diff --git a/src/c_api/connection.cpp b/src/c_api/connection.cpp
+index ec36e75..8b63868 100644
+--- a/src/c_api/connection.cpp
++++ b/src/c_api/connection.cpp
+@@ -107,8 +107,7 @@ void lbug_connection_destroy(lbug_connection* connection) {
+     if (connection == nullptr) {
+         return;
+     }
+-    std::atomic_ref<void*> atomic_conn(connection->_connection);
+-    void* ptr = atomic_conn.exchange(nullptr);
++    void* ptr = exchangeHandleWithNull(connection->_connection);
+     if (ptr != nullptr) {
+         auto connectionPtr = static_cast<Connection*>(ptr);
+         forgetArrowTableIDs(connectionPtr);
+diff --git a/src/c_api/database.cpp b/src/c_api/database.cpp
+index 7f43e73..b71f9fa 100644
+--- a/src/c_api/database.cpp
++++ b/src/c_api/database.cpp
+@@ -33,8 +33,7 @@ void lbug_database_destroy(lbug_database* database) {
+     if (database == nullptr) {
+         return;
+     }
+-    std::atomic_ref<void*> atomic_db(database->_database);
+-    void* ptr = atomic_db.exchange(nullptr);
++    void* ptr = exchangeHandleWithNull(database->_database);
+     if (ptr != nullptr) {
+         delete static_cast<Database*>(ptr);
+     }
+diff --git a/src/function/aggregate_function.cpp b/src/function/aggregate_function.cpp
+index bf36562..2e77040 100644
+--- a/src/function/aggregate_function.cpp
++++ b/src/function/aggregate_function.cpp
+@@ -38,7 +38,7 @@ void AggregateFunctionUtils::appendSumOrAvgFuncs(std::string name, common::Logic
+             LogicalType{inputType},
+             [&]<IntegerTypes T>(T) {
+                 using ResultType =
+-                    std::conditional<UnsignedIntegerTypes<T>, uint128_t, int128_t>::type;
++                    std::conditional_t<UnsignedIntegerTypes<T>, uint128_t, int128_t>;
+                 LogicalTypeID resultType =
+                     UnsignedIntegerTypes<T> ? LogicalTypeID::UINT128 : LogicalTypeID::INT128;
+                 // For avg aggregate functions, the result type is always double.
+diff --git a/src/include/c_api/helpers.h b/src/include/c_api/helpers.h
+index 95d3c94..bdc53d9 100644
+--- a/src/include/c_api/helpers.h
++++ b/src/include/c_api/helpers.h
+@@ -1,5 +1,6 @@
+ #pragma once
+ 
++#include <atomic>
+ #include <cstdint>
+ #include <exception>
+ #include <string>
+@@ -13,6 +14,20 @@ time_t convertTmToTime(struct tm tm);
+ int32_t convertTimeToTm(time_t time, struct tm* out_tm);
+ #endif
+ 
++// Atomically takes a C API handle pointer, leaving nullptr behind, so a handle
++// destroyed twice is released only once. std::atomic_ref needs libc++ 19 or
++// newer; older libc++ releases (for example macOS SDKs before 15.4) use the
++// equivalent GCC/Clang builtin.
++inline void* exchangeHandleWithNull(void*& handle) {
++#if defined(__cpp_lib_atomic_ref)
++    return std::atomic_ref<void*>(handle).exchange(nullptr);
++#elif defined(__GNUC__) || defined(__clang__)
++    return __atomic_exchange_n(&handle, nullptr, __ATOMIC_SEQ_CST);
++#else
++#error "exchangeHandleWithNull requires std::atomic_ref or GCC/Clang atomic builtins"
++#endif
++}
++
+ void setLastCAPIErrorMessage(const std::string& message);
+ 
+ void clearLastCAPIErrorMessage();
+diff --git a/src/include/common/string_format.h b/src/include/common/string_format.h
+new file mode 100644
+index 0000000..985961f
+--- /dev/null
++++ b/src/include/common/string_format.h
+@@ -0,0 +1,39 @@
++#pragma once
++
++// Formatting entry point for LadybugDB sources in the rladybugdb CRAN build.
++// tools/vendor.R rewrites upstream std::format calls to stringFormat. By
++// default this forwards to std::format. Toolchains whose C++ library cannot
++// provide std::format for the deployment target (for example Apple clang 14,
++// or macOS targets older than 13.3) build with LBUG_FMT_FALLBACK, which uses
++// the {fmt} library bundled with spdlog. Both keep compile-time checking of
++// format strings.
++
++#include <string>
++#include <utility>
++
++#ifdef LBUG_FMT_FALLBACK
++#ifndef FMT_HEADER_ONLY
++#define FMT_HEADER_ONLY
++#endif
++#include "spdlog/fmt/bundled/format.h"
++#else
++#include <format>
++#endif
++
++namespace lbug {
++namespace common {
++
++#ifdef LBUG_FMT_FALLBACK
++template<typename... Args>
++inline std::string stringFormat(::fmt::format_string<Args...> formatString, Args&&... args) {
++    return ::fmt::format(formatString, std::forward<Args>(args)...);
++}
++#else
++template<typename... Args>
++inline std::string stringFormat(std::format_string<Args...> formatString, Args&&... args) {
++    return std::format(formatString, std::forward<Args>(args)...);
++}
++#endif
++
++} // namespace common
++} // namespace lbug
+diff --git a/src/include/function/aggregate/avg.h b/src/include/function/aggregate/avg.h
+index ba50bd4..7f1c36a 100644
+--- a/src/include/function/aggregate/avg.h
++++ b/src/include/function/aggregate/avg.h
+@@ -19,8 +19,8 @@ struct AvgState : public AggregateStateWithNull {
+     void finalize()
+         requires common::IntegerTypes<T>
+     {
+-        using ResultType = std::conditional<common::SignedIntegerTypes<T>, common::Int128_t,
+-            common::UInt128_t>::type;
++        using ResultType = std::conditional_t<common::SignedIntegerTypes<T>, common::Int128_t,
++            common::UInt128_t>;
+         if (!isNull) {
+             avg = ResultType::template cast<long double>(sum) /
+                   ResultType::template cast<long double>(count);
+diff --git a/src/include/storage/index/hash_index.h b/src/include/storage/index/hash_index.h
+index 61327a4..f13a5de 100644
+--- a/src/include/storage/index/hash_index.h
++++ b/src/include/storage/index/hash_index.h
+@@ -123,7 +123,7 @@ public:
+     // - the key doesn't exist in the local storage, check if the key exists in the persistent
+     // index, if
+     //   so, return false, else insert the key to the local storage.
+-    using InsertType = InMemHashIndex<T>::OwnedType;
++    using InsertType = typename InMemHashIndex<T>::OwnedType;
+     bool insertInternal(const transaction::Transaction* transaction, InsertType&& key,
+         common::offset_t value, visible_func isVisible) {
+         common::offset_t tmpResult = 0;
+diff --git a/src/include/storage/local_storage/local_hash_index.h b/src/include/storage/local_storage/local_hash_index.h
+index 1322464..d68dd01 100644
+--- a/src/include/storage/local_storage/local_hash_index.h
++++ b/src/include/storage/local_storage/local_hash_index.h
+@@ -23,8 +23,8 @@ enum class HashIndexLocalLookupState : uint8_t { KEY_FOUND, KEY_DELETED, KEY_NOT
+ template<typename T>
+ class HashIndexLocalStorage final : public BaseHashIndexLocalStorage {
+ public:
+-    using OwnedType = InMemHashIndex<T>::OwnedType;
+-    using KeyType = InMemHashIndex<T>::KeyType;
++    using OwnedType = typename InMemHashIndex<T>::OwnedType;
++    using KeyType = typename InMemHashIndex<T>::KeyType;
+ 
+     explicit HashIndexLocalStorage(MemoryManager& memoryManager, OverflowFileHandle* handle)
+         : localDeletions{}, localInsertions{memoryManager, handle} {}
+diff --git a/src/storage/compression/compression.cpp b/src/storage/compression/compression.cpp
+index 219136d..8fd7de9 100644
+--- a/src/storage/compression/compression.cpp
++++ b/src/storage/compression/compression.cpp
+@@ -23,7 +23,6 @@
+ #include "storage/storage_utils.h"
+ #include "storage/table/column_chunk_data.h"
+ #include "common/string_format.h"
+-#include <ranges>
+ 
+ using namespace lbug::common;
+ 
+@@ -669,13 +668,17 @@ void IntegerBitpacking<T>::setValuesFromUncompressed(const uint8_t* srcBuffer, o
+     // non-zero offset However we don't care about the value stored for null values
+     // Currently they will be mangled by storage+recovery (underflow in the subtraction
+     // below)
+-    DASSERT(numValues == static_cast<offset_t>(std::ranges::count_if(
+-                             std::ranges::iota_view{posInSrc, posInSrc + numValues},
+-                             [srcBuffer, &metadata, nullMask](offset_t i) {
+-                                 auto value = reinterpret_cast<const T*>(srcBuffer)[i];
+-                                 return (nullMask && nullMask->isNull(i)) ||
+-                                        canUpdateInPlace(std::span(&value, 1), metadata);
+-                             })));
++    DASSERT(numValues == static_cast<offset_t>([&] {
++        offset_t numUpdatable = 0;
++        for (auto i = posInSrc; i < posInSrc + numValues; ++i) {
++            auto value = reinterpret_cast<const T*>(srcBuffer)[i];
++            if ((nullMask && nullMask->isNull(i)) ||
++                canUpdateInPlace(std::span(&value, 1), metadata)) {
++                ++numUpdatable;
++            }
++        }
++        return numUpdatable;
++    }()));
+ 
+     // Data can be considered to be stored in aligned chunks of 32 values
+     // with a size of 32 * bitWidth bits,
+diff --git a/src/storage/compression/float_compression.cpp b/src/storage/compression/float_compression.cpp
+index 83e54e4..c898983 100644
+--- a/src/storage/compression/float_compression.cpp
++++ b/src/storage/compression/float_compression.cpp
+@@ -3,7 +3,6 @@
+ #include "alp/encode.hpp"
+ #include "common/system_config.h"
+ #include "common/utils.h"
+-#include <ranges>
+ 
+ namespace lbug {
+ namespace storage {
+@@ -145,14 +144,17 @@ void FloatCompression<T>::setValuesFromUncompressed(const uint8_t* srcBuffer,
+     const common::NullMask* nullMask) const {
+     // each individual value that is being updated should be able to be updated in place
+     RUNTIME_CHECK(InPlaceUpdateLocalState localUpdateState{});
+-    DASSERT(numValues ==
+-            static_cast<common::offset_t>(
+-                std::ranges::count_if(std::ranges::iota_view{srcOffset, srcOffset + numValues},
+-                    [&localUpdateState, srcBuffer, &metadata, nullMask](common::offset_t i) {
+-                        auto value = reinterpret_cast<const T*>(srcBuffer)[i];
+-                        return (nullMask && nullMask->isNull(i)) ||
+-                               canUpdateInPlace(std::span(&value, 1), metadata, localUpdateState);
+-                    })));
++    DASSERT(numValues == static_cast<common::offset_t>([&] {
++        common::offset_t numUpdatable = 0;
++        for (auto i = srcOffset; i < srcOffset + numValues; ++i) {
++            auto value = reinterpret_cast<const T*>(srcBuffer)[i];
++            if ((nullMask && nullMask->isNull(i)) ||
++                canUpdateInPlace(std::span(&value, 1), metadata, localUpdateState)) {
++                ++numUpdatable;
++            }
++        }
++        return numUpdatable;
++    }()));
+ 
+     std::vector<EncodedType> integerEncodedValues(numValues);
+     for (size_t i = 0; i < numValues; ++i) {
+diff --git a/src/storage/index/in_mem_hash_index.cpp b/src/storage/index/in_mem_hash_index.cpp
+index 0d73c08..77faee1 100644
+--- a/src/storage/index/in_mem_hash_index.cpp
++++ b/src/storage/index/in_mem_hash_index.cpp
+@@ -217,7 +217,7 @@ void InMemHashIndex<T>::reclaimOverflowSlots(SlotIterator iter) {
+ }
+ 
+ template<typename T>
+-InMemHashIndex<T>::InMemSlotType* InMemHashIndex<T>::clearNextOverflowAndAdvanceIter(
++typename InMemHashIndex<T>::InMemSlotType* InMemHashIndex<T>::clearNextOverflowAndAdvanceIter(
+     SlotIterator& iter) {
+     auto originalSlot = iter.slot;
+     auto nextOverflowSlot = iter.slot->header.nextOvfSlotId;
+@@ -258,7 +258,7 @@ uint32_t InMemHashIndex<T>::allocateAOSlot() {
+ }
+ 
+ template<typename T>
+-InMemHashIndex<T>::InMemSlotType* InMemHashIndex<T>::getSlot(const SlotInfo& slotInfo) const {
++typename InMemHashIndex<T>::InMemSlotType* InMemHashIndex<T>::getSlot(const SlotInfo& slotInfo) const {
+     if (slotInfo.slotType == SlotType::PRIMARY) {
+         return &pSlots->operator[](slotInfo.slotId);
+     } else {
+diff --git a/src/storage/table/rel_table.cpp b/src/storage/table/rel_table.cpp
+index 420f909..0b9e512 100644
+--- a/src/storage/table/rel_table.cpp
++++ b/src/storage/table/rel_table.cpp
+@@ -20,7 +20,6 @@
+ #include "storage/wal/local_wal.h"
+ #include "transaction/transaction.h"
+ #include "common/string_format.h"
+-#include <ranges>
+ 
+ using namespace lbug::catalog;
+ using namespace lbug::common;
+@@ -301,7 +300,8 @@ bool RelTable::delete_(Transaction* transaction, TableDeleteState& deleteState)
+ 
+ void RelTable::detachDelete(Transaction* transaction, RelTableDeleteState* deleteState) {
+     auto direction = deleteState->detachDeleteDirection;
+-    if (std::ranges::count(getStorageDirections(), direction) == 0) {
++    const auto storageDirections = getStorageDirections();
++    if (std::count(storageDirections.begin(), storageDirections.end(), direction) == 0) {
+         throw RuntimeException(
+             lbug::common::stringFormat("Cannot delete edges of direction {} from table {} as they do not exist.",
+                 RelDirectionUtils::relDirectionToString(direction), tableName));
+@@ -331,7 +331,8 @@ void RelTable::detachDelete(Transaction* transaction, RelTableDeleteState* delet
+ 
+ void RelTable::detachDeleteBatch(Transaction* transaction, ValueVector& srcNodeIDVector,
+     ValueVector& dstNodeIDVector, ValueVector& relIDVector, RelDataDirection direction) {
+-    if (std::ranges::count(getStorageDirections(), direction) == 0) {
++    const auto storageDirections = getStorageDirections();
++    if (std::count(storageDirections.begin(), storageDirections.end(), direction) == 0) {
+         return;
+     }
+     const auto& srcSelVector = srcNodeIDVector.state->getSelVector();
+diff --git a/src/storage/table/update_info.cpp b/src/storage/table/update_info.cpp
+index 22c9ebb..7414b6e 100644
+--- a/src/storage/table/update_info.cpp
++++ b/src/storage/table/update_info.cpp
+@@ -89,7 +89,8 @@ void UpdateInfo::lookup(const Transaction* transaction, offset_t rowInChunk, Val
+     auto [vectorIdx, rowInVector] =
+         StorageUtils::getQuotientRemainder(rowInChunk, DEFAULT_VECTOR_CAPACITY);
+     bool updated = false;
+-    iterateVectorInfo(transaction, vectorIdx, [&](const VectorUpdateInfo& vectorInfo) {
++    iterateVectorInfo(transaction, vectorIdx,
++        [&, rowInVector = rowInVector](const VectorUpdateInfo& vectorInfo) {
+         if (updated) {
+             return;
+         }
+diff --git a/src/transaction/transaction_manager.cpp b/src/transaction/transaction_manager.cpp
+index 0632295..ca49e6a 100644
+--- a/src/transaction/transaction_manager.cpp
++++ b/src/transaction/transaction_manager.cpp
+@@ -188,9 +188,10 @@ void TransactionManager::rollback(main::ClientContext& clientContext, transactio
+     std::unique_lock lck{mtxForSerializingPublicFunctionCalls};
+     clientContext.cleanUp();
+     const auto transactionIt =
+-        std::ranges::find_if(activeTransactions, [transactionID](const auto& activeTransaction) {
+-            return activeTransaction->getID() == transactionID;
+-        });
++        std::find_if(activeTransactions.begin(), activeTransactions.end(),
++            [transactionID](const auto& activeTransaction) {
++                return activeTransaction->getID() == transactionID;
++            });
+     if (transactionIt == activeTransactions.end()) {
+         return;
+     }
+@@ -275,7 +276,7 @@ bool TransactionManager::hasNoActiveTransactions() const {
+ }
+ 
+ void TransactionManager::clearTransactionNoLock(transaction_t transactionID) {
+-    DASSERT(std::ranges::any_of(activeTransactions.begin(), activeTransactions.end(),
++    DASSERT(std::any_of(activeTransactions.begin(), activeTransactions.end(),
+         [transactionID](const auto& activeTransaction) {
+             return activeTransaction->getID() == transactionID;
+         }));
+diff --git a/third_party/simsimd/include/types.h b/third_party/simsimd/include/types.h
+index 3771956..78d7d07 100644
+--- a/third_party/simsimd/include/types.h
++++ b/third_party/simsimd/include/types.h
+@@ -91,8 +91,19 @@
+ #endif // !defined(SIMSIMD_TARGET_NEON_F16) || ...
+ 
+ // Compiling for Arm: SIMSIMD_TARGET_NEON_BF16
++//
++// Before LLVM 16 (Apple clang 15), arm_neon.h declares the BF16 intrinsics only when the
++// whole translation unit targets BF16, so the target-attributed BF16 kernels cannot be
++// compiled with those compilers; the serial BF16 kernels are used instead.
++#if defined(__clang__) && !defined(__ARM_FEATURE_BF16_VECTOR_ARITHMETIC) &&                      \
++    ((defined(__apple_build_version__) && __clang_major__ < 15) ||                                \
++     (!defined(__apple_build_version__) && __clang_major__ < 16))
++#define _SIMSIMD_NEON_BF16_INTRINSICS 0
++#else
++#define _SIMSIMD_NEON_BF16_INTRINSICS 1
++#endif
+ #if !defined(SIMSIMD_TARGET_NEON_BF16) || (SIMSIMD_TARGET_NEON_BF16 && !_SIMSIMD_TARGET_ARM)
+-#if defined(__ARM_NEON)
++#if defined(__ARM_NEON) && _SIMSIMD_NEON_BF16_INTRINSICS
+ #define SIMSIMD_TARGET_NEON_BF16 _SIMSIMD_TARGET_ARM
+ #else
+ #undef SIMSIMD_TARGET_NEON_BF16

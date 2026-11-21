@@ -16,6 +16,10 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 database formerly known as Kuzu. It links directly to the LadybugDB 0.20.4 C
 API and requires neither Python nor a database server.
 
+Optional integrations use packages such as `arrow`, `igraph`, and `tidygraph`
+that must already be installed. Functions and examples do not install packages;
+examples using an optional package are skipped when it is unavailable.
+
 ## Open a database
 
 Use `":memory:"` for an ephemeral database or a file path for persistence.

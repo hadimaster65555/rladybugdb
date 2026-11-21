@@ -9,16 +9,20 @@
 #' @param parameters A named list of query parameters for parameterised queries.
 #'   `NULL` (default) means no parameters.
 #'
-#' @return An object of class `lb_result`.
+#' @return An `lb_result` list containing a native result pointer, its owning
+#'   connection, query text, column names and types, and row count. It represents
+#'   query rows or statement metadata and must be released with [lb_close()].
 #'
 #' @examples
-#' \dontrun{
-#' db   <- lb_database(":memory:")
-#' conn <- lb_connection(db)
-#' lb_execute(conn, "CREATE NODE TABLE Person (name STRING, PRIMARY KEY(name))")
-#' lb_execute(conn, "CREATE (:Person {name: $name})",
-#'            parameters = list(name = "Alice"))
-#' }
+#' with_lb_connection(":memory:", {
+#'   lb_close(lb_execute(
+#'     conn, "CREATE NODE TABLE Person (name STRING, PRIMARY KEY(name))"
+#'   ))
+#'   result <- lb_execute(conn, "CREATE (:Person {name: $name})",
+#'                        parameters = list(name = "Alice"))
+#'   print(result)
+#'   lb_close(result)
+#' }, num_threads = 2)
 #'
 #' @export
 lb_execute <- function(conn, query, parameters = NULL) {
@@ -76,16 +80,18 @@ lb_execute <- function(conn, query, parameters = NULL) {
 #' @inheritParams lb_execute
 #' @param ... Passed to [as.data.frame.lb_result()].
 #'
-#' @return A `data.frame`.
+#' @return A `data.frame` containing all query rows, with one column per
+#'   returned expression. The underlying native result is closed automatically.
 #'
 #' @examples
-#' \dontrun{
-#' db   <- lb_database(":memory:")
-#' conn <- lb_connection(db)
-#' lb_execute(conn, "CREATE NODE TABLE Person (name STRING, age INT64, PRIMARY KEY(name))")
-#' lb_execute(conn, "CREATE (:Person {name: 'Alice', age: 30})")
-#' df <- lb_query(conn, "MATCH (p:Person) RETURN p.name, p.age")
-#' }
+#' with_lb_connection(":memory:", {
+#'   lb_close(lb_execute(
+#'     conn,
+#'     "CREATE NODE TABLE Person (name STRING, age INT64, PRIMARY KEY(name))"
+#'   ))
+#'   lb_close(lb_execute(conn, "CREATE (:Person {name: 'Alice', age: 30})"))
+#'   lb_query(conn, "MATCH (p:Person) RETURN p.name AS name, p.age AS age")
+#' }, num_threads = 2)
 #'
 #' @export
 lb_query <- function(conn, query, parameters = NULL, ...) {

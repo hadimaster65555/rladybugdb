@@ -5,7 +5,8 @@
 #'
 #' @param x An `lb_result`.
 #' @param ... Unused.
-#' @return A data frame.
+#' @return A `data.frame` containing all query rows, with one column per
+#'   returned expression. Nested database values are stored in list columns.
 #' @export
 as.data.frame.lb_result <- function(x, ...) {
   .lb_check_result(x)
@@ -19,7 +20,8 @@ as.data.frame.lb_result <- function(x, ...) {
 #'
 #' @param x An `lb_result`.
 #' @param ... Unused.
-#' @return An `arrow::Table` backed by LadybugDB's Arrow C Data export.
+#' @return An `arrow::Table` containing all query rows and columns, backed by
+#'   LadybugDB's Arrow C Data export. The streaming cursor is preserved.
 #' @export
 as_arrow_table <- function(x, ...) UseMethod("as_arrow_table")
 
@@ -28,7 +30,7 @@ as_arrow_table.lb_result <- function(x, ...) {
   .lb_check_result(x)
   if (!requireNamespace("arrow", quietly = TRUE)) {
     rlang::abort(
-      "Package `arrow` is required. Install it with `install.packages('arrow')`.",
+      "Package `arrow` is required for Arrow conversion.",
       class = "rladybugdb_error_missing_pkg"
     )
   }
@@ -41,7 +43,8 @@ as_arrow_table.lb_result <- function(x, ...) {
 #'
 #' @param result An `lb_result`.
 #' @param n Maximum rows to fetch. `Inf` fetches all remaining rows.
-#' @return An `arrow::Table`.
+#' @return An `arrow::Table` containing up to `n` rows from the current cursor
+#'   position. The cursor advances by the number of rows returned.
 #' @export
 lb_fetch_arrow <- function(result, n = Inf) {
   .lb_check_result(result)
@@ -62,7 +65,8 @@ lb_fetch_arrow <- function(result, n = Inf) {
 #'
 #' @param x An `lb_result`.
 #' @param ... Passed to [as.data.frame()].
-#' @return A tibble.
+#' @return A tibble (classes `tbl_df`, `tbl`, and `data.frame`) containing all
+#'   query rows, with one column per returned expression.
 #' @export
 as_tibble <- function(x, ...) UseMethod("as_tibble")
 
@@ -79,12 +83,23 @@ as_tibble.lb_result <- function(x, ...) {
 #'
 #' @param x An `lb_interval` value.
 #' @param ... Unused.
+#' @return `format()` returns a character string describing the interval's
+#'   months, days, and microseconds. `print()` displays that description and
+#'   returns the supplied `lb_interval` object invisibly.
+#' @examples
+#' interval <- structure(
+#'   list(months = 1L, days = 2L, microseconds = 3000000),
+#'   class = "lb_interval"
+#' )
+#' format(interval)
+#' print(interval)
 #' @export
 format.lb_interval <- function(x, ...) {
   sprintf("%s months, %s days, %s microseconds",
           x[["months"]], x[["days"]], x[["microseconds"]])
 }
 
+#' @rdname format.lb_interval
 #' @export
 print.lb_interval <- function(x, ...) {
   cat("<lb_interval> ", format(x), "\n", sep = "")

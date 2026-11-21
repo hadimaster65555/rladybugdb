@@ -21,8 +21,13 @@ lb_update_extension(conn, name)
 \item{name}{Official extension name.}
 }
 \value{
-\code{lb_list_extensions()} returns a data frame; the mutation helpers
-return an \code{lb_result}.
+\code{lb_list_extensions()} returns a \code{data.frame} describing the
+official extensions reported by the engine, with one row per extension.
+\code{lb_load_extension()} returns an \code{lb_result} containing the LOAD
+statement's metadata; release it with \code{\link[=lb_close]{lb_close()}}.
+\code{lb_install_extension()} and \code{lb_update_extension()} always raise an error
+of class \code{rladybugdb_error_unsupported} and return no value, because remote
+installation and updates are unavailable in the CRAN build.
 }
 \description{
 These are thin wrappers around LadybugDB's extension Cypher commands.

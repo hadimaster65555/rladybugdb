@@ -12,7 +12,9 @@
 #'   `throw_on_wal_replay_failure`, `enable_checksums`, `enable_multi_writes`,
 #'   and `enable_default_hash_index` (`thread_qos` is also accepted on macOS).
 #'
-#' @return An `lb_database` object.
+#' @return An `lb_database` list containing a native database pointer, its path,
+#'   read-only flag, and configuration. It represents an open database that
+#'   should be released with [lb_close()] after its connections are closed.
 #' @export
 lb_database <- function(path = ":memory:", read_only = FALSE, config = list()) {
   if (!is.character(path) || length(path) != 1L || is.na(path) || !nzchar(path)) {
@@ -96,7 +98,9 @@ print.lb_database <- function(x, ...) {
 #'
 #' @param database An `lb_database` object.
 #' @param num_threads Positive integer execution thread limit, or `NULL`.
-#' @return An `lb_connection` object.
+#' @return An `lb_connection` list containing a native connection pointer and
+#'   its owning database. Use it to execute queries, and release it with
+#'   [lb_close()] after its results are closed.
 #' @export
 lb_connection <- function(database, num_threads = NULL) {
   if (!inherits(database, "lb_database")) {
@@ -137,7 +141,8 @@ print.lb_connection <- function(x, ...) {
 #'
 #' @param x An `lb_result`, `lb_connection`, or `lb_database`.
 #' @param ... Unused.
-#' @return Invisible `NULL`.
+#' @return Invisible `NULL`, called for the side effect of releasing the
+#'   object's native resources.
 #' @export
 lb_close <- function(x, ...) UseMethod("lb_close")
 
@@ -169,7 +174,8 @@ lb_close.lb_database <- function(x, ...) {
 #' @param code Code evaluated with `conn` bound to the open connection.
 #' @param ... Passed to [lb_database()].
 #' @param num_threads Passed to [lb_connection()].
-#' @return The value of `code`.
+#' @return The value produced by `code`, with its class and visibility
+#'   preserved. The connection and database are closed before returning.
 #' @export
 with_lb_connection <- function(path = ":memory:", code, ..., num_threads = NULL) {
   database <- lb_database(path, ...)

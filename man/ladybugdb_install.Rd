@@ -10,15 +10,11 @@ ladybugdb_install(...)
 \item{...}{Ignored.}
 }
 \value{
-Invisible \code{NULL}.
+Invisible \code{NULL}, called for the side effect of issuing a
+deprecation warning. No software is installed.
 }
 \description{
-This function is deprecated. The C library is now bundled with the package
-and no Python installation is required.
-}
-\examples{
-\dontrun{
-ladybugdb_install()  # no longer needed
-}
-
+This function is deprecated. The C library is built from bundled source
+during package installation and no Python installation is required. This
+helper only issues a deprecation warning; it does not install any software.
 }

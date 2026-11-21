@@ -7,7 +7,8 @@
 Ladybug()
 }
 \value{
-A \code{LadybugDriver}.
+A \code{LadybugDriver} S4 object, inheriting from \code{DBIDriver}, for use with
+\code{\link[DBI:dbConnect]{DBI::dbConnect()}} to open a LadybugDB database.
 }
 \description{
 Create a LadybugDB DBI driver

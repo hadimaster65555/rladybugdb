@@ -9,6 +9,10 @@
 \arguments{
 \item{expr}{Expression to evaluate.}
 }
+\value{
+The value of \code{expr}, with its class and visibility preserved.
+Raises a typed error if evaluating the expression fails.
+}
 \description{
 Wraps a call expression, catches any condition thrown by the Rcpp layer,
 and re-throws as a typed R error with class \code{rladybugdb_error_query}.

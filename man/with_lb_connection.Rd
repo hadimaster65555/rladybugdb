@@ -16,7 +16,8 @@ with_lb_connection(path = ":memory:", code, ..., num_threads = NULL)
 \item{num_threads}{Passed to \code{\link[=lb_connection]{lb_connection()}}.}
 }
 \value{
-The value of \code{code}.
+The value produced by \code{code}, with its class and visibility
+preserved. The connection and database are closed before returning.
 }
 \description{
 Run code with an automatically closed LadybugDB connection

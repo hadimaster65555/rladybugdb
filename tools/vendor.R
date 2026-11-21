@@ -60,16 +60,60 @@ if (!file.exists(file.path(lbug_source, "CMakeLists.txt"))) {
 
 patch_executable <- Sys.which("patch")
 if (!nzchar(patch_executable)) {
-  stop("patch is required to apply the CRAN portability patch")
+  stop("patch is required to apply the CRAN portability patches")
 }
-patch_file <- normalizePath("tools/patches/ladybugdb-cran.patch")
-status <- system2(
-  patch_executable,
-  c("-d", shQuote(lbug_source), "-p1", "-i", shQuote(patch_file))
-)
-if (!identical(status, 0L)) {
-  stop("Could not apply ", patch_file)
+apply_patch <- function(file) {
+  patch_file <- normalizePath(file)
+  status <- system2(
+    patch_executable,
+    c("-d", shQuote(lbug_source), "-p1", "-i", shQuote(patch_file))
+  )
+  if (!identical(status, 0L)) {
+    stop("Could not apply ", patch_file)
+  }
 }
+
+# Route upstream std::format calls through common/string_format.h, which the
+# macOS compatibility patch adds. That header uses std::format where the C++
+# library provides it and the {fmt} library bundled with spdlog otherwise
+# (selected by configure). The rewrite is a fixed-string substitution, so it
+# can be repeated exactly when the pinned engine is updated.
+rewrite_std_format <- function(lbug_source) {
+  src_dir <- file.path(lbug_source, "src")
+  compat_header <- file.path(src_dir, "include", "common", "string_format.h")
+  files <- list.files(src_dir, pattern = "\\.(h|cpp)$", recursive = TRUE,
+                      full.names = TRUE)
+  files <- files[normalizePath(files) !=
+                   normalizePath(compat_header, mustWork = FALSE)]
+  rewritten <- 0L
+  for (path in files) {
+    text <- readChar(path, file.info(path)$size, useBytes = TRUE)
+    new <- gsub("#include <format>", "#include \"common/string_format.h\"",
+                text, fixed = TRUE, useBytes = TRUE)
+    new <- gsub("std::format(", "lbug::common::stringFormat(", new,
+                fixed = TRUE, useBytes = TRUE)
+    if (!identical(new, text)) {
+      writeChar(new, path, eos = NULL, useBytes = TRUE)
+      rewritten <- rewritten + 1L
+    }
+  }
+  remaining <- files[vapply(files, function(path) {
+    text <- readChar(path, file.info(path)$size, useBytes = TRUE)
+    grepl("std::format\\s*\\(|#\\s*include\\s*<format>", text,
+          useBytes = TRUE)
+  }, logical(1))]
+  if (length(remaining)) {
+    stop("std::format uses remain after the rewrite: ",
+         paste(remaining, collapse = ", "))
+  }
+  message("Routed std::format through stringFormat in ", rewritten, " files")
+}
+
+# Order matters: the macOS compatibility patch is made against the rewritten
+# tree.
+apply_patch("tools/patches/ladybugdb-cran.patch")
+rewrite_std_format(lbug_source)
+apply_patch("tools/patches/ladybugdb-macos-compat.patch")
 
 dir.create("tools/vendor", recursive = TRUE, showWarnings = FALSE)
 archive <- normalizePath(
