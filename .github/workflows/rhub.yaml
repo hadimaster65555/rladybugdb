@@ -57,6 +57,11 @@ jobs:
         config: ${{ fromJson(needs.setup.outputs.containers) }}
     container:
       image: ${{ matrix.config.container }}
+    env:
+      # As on CRAN's check machines, keep the output of re-building the
+      # vignettes (build_vignettes.log), so sanitizer reports from vignette
+      # code can be read back.
+      _R_CHECK_ALWAYS_LOG_VIGNETTE_OUTPUT_: true
 
     steps:
       - uses: r-hub/actions/checkout@v1
@@ -104,6 +109,37 @@ jobs:
               keep { line = $0; gsub(/%/, "%25", line); block = block "%0A" line }
               END { flush() }
             ' "$check_log" | while IFS= read -r item; do echo "::warning title=R CMD check details::$item"; done
+          fi
+
+      - name: Report sanitizer and ODR findings
+        if: always()
+        shell: bash
+        run: |
+          # Runtime reports from the undefined-behaviour and address sanitizers
+          # in the tests, examples and vignettes, and -Wodr warnings from
+          # link-time optimisation, as on CRAN's gcc-ASAN and gcc-UBSAN checks.
+          check_log=$(find . -name 00check.log 2>/dev/null | head -n 1)
+          [ -n "$check_log" ] || exit 0
+          rcheck=$(dirname "$check_log")
+          # Only the check's own output: the installation log, the example and
+          # test transcripts, and the vignette log (not the package sources).
+          outputs=$(find "$rcheck" -maxdepth 2 -type f -not -path '*/00_pkg_src/*' \
+            \( -name 00install.out -o -name '*.Rout' -o -name '*.Rout.fail' -o -name '*.log' \) | sort)
+          reports=$(printf '%s\n' "$outputs" | xargs grep -h -E 'runtime error:|ERROR: AddressSanitizer' 2>/dev/null \
+            | sed -E 's#^.*/lbug-src/#lbug-src/#; s/0x[0-9a-f]+/ADDR/g' \
+            | sort | uniq -c | sort -rn || true)
+          if [ -n "$reports" ]; then
+            n=$(printf '%s\n' "$reports" | wc -l | tr -d ' ')
+            msg=$(printf '%s\n' "$reports" | awk 'NR <= 40 { gsub(/%/, "%25"); printf "%s%%0A", $0 }')
+            echo "::warning title=Sanitizer reports (${n} distinct)::$msg"
+          else
+            echo "::notice title=Sanitizer reports::None in: $(printf '%s\n' "$outputs" | sed "s#^$rcheck/##" | tr '\n' ' ')"
+          fi
+          odr=$(printf '%s\n' "$outputs" | xargs grep -h -E 'One Definition Rule|\[-Wodr\]' 2>/dev/null | sort -u | awk 'NR <= 10' || true)
+          if [ -n "$odr" ]; then
+            echo "::warning title=ODR warnings::$(printf '%s\n' "$odr" | awk '{ gsub(/%/, "%25"); printf "%s%%0A", $0 }')"
+          else
+            echo "::notice title=ODR warnings::None"
           fi
 
       - name: Show why the package could not be built

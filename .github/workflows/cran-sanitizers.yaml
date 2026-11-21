@@ -1,0 +1,132 @@
+# R CMD check under CRAN's gcc-ASAN/UBSAN configuration.
+#
+# The R-hub gcc-asan image reproduces the setup described in
+# https://www.stats.ox.ac.uk/pub/bdr/memtests/README.txt: GCC with
+# -fsanitize=address,undefined,bounds-strict in CC/CXX and -flto in the
+# compiler flags, so configure also builds the bundled engine with them.
+# Dependencies are installed here rather than by r-hub/actions/setup-deps,
+# which tries to build every suggested package under the sanitizers: the
+# packages the tests need must install, the others are optional.
+name: CRAN sanitizer checks
+
+on:
+  # fix/** branches also run the other checks; sanitizers/** runs only this one.
+  push:
+    branches: ['fix/**', 'sanitizers/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gcc-sanitizers:
+    name: gcc-ASAN/UBSAN (R-hub gcc-asan image)
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    container:
+      image: ghcr.io/r-hub/containers/gcc-asan:latest
+    env:
+      _R_CHECK_FORCE_SUGGESTS_: false
+      _R_CHECK_ALWAYS_LOG_VIGNETTE_OUTPUT_: true
+      UBSAN_OPTIONS: print_stacktrace=1
+      ASAN_OPTIONS: detect_leaks=0
+
+    steps:
+      - uses: r-hub/actions/checkout@v1
+
+      - name: Show the compiler configuration
+        shell: bash
+        run: |
+          if ! command -v xz > /dev/null 2>&1; then dnf install -y -q xz; fi
+          msg=$( { R --version | head -n 1; echo "CXX20: $(R CMD config CXX20)"; echo "CXX20FLAGS: $(R CMD config CXX20FLAGS)"; } | awk '{ gsub(/%/, "%25"); printf "%s%%0A", $0 }')
+          echo "::notice title=Toolchain::$msg"
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          # Outside the package directory, so R CMD build does not pick them up.
+          mkdir -p /tmp/deps
+          cat > /tmp/deps/install.R <<'EOF'
+          # Usage: Rscript install.R <required: TRUE/FALSE> <package>...
+          args <- commandArgs(TRUE)
+          required <- as.logical(args[1]); pkgs <- args[-1]
+          cat("user:", Sys.info()[["user"]], "HOME:", Sys.getenv("HOME"), "\n")
+          cat("libPaths:", .libPaths(), "\nrepos:", getOption("repos"), "\n")
+          have <- function(p) vapply(p, requireNamespace, logical(1), quietly = TRUE)
+          todo <- pkgs[!have(pkgs)]
+          if (length(todo) && requireNamespace("pak", quietly = TRUE)) {
+            try(pak::pkg_install(todo, upgrade = FALSE, ask = FALSE))
+          }
+          todo <- pkgs[!have(pkgs)]
+          if (length(todo)) try(install.packages(todo, Ncpus = 4L))
+          missing <- pkgs[!have(pkgs)]
+          if (length(missing)) {
+            message("Not installed: ", paste(missing, collapse = ", "))
+            if (required) quit(status = 1)
+          }
+          EOF
+          annotate_tail() {
+            echo "::warning title=$1 (last 60 lines)::$(tail -n 60 "$2" | awk '{ gsub(/%/, "%25"); gsub(/\r/, ""); printf "%s%%0A", $0 }')"
+          }
+          if ! Rscript /tmp/deps/install.R TRUE DBI Rcpp rlang testthat withr knitr rmarkdown \
+              > /tmp/deps/required.log 2>&1; then
+            annotate_tail "Installing required packages failed" /tmp/deps/required.log
+            exit 1
+          fi
+          # Optional packages: each may fail or time out without failing the job.
+          for p in bit64 tibble DBItest dplyr ggplot2 igraph tidygraph arrow; do
+            timeout 1500 Rscript /tmp/deps/install.R FALSE "$p" > "/tmp/deps/$p.log" 2>&1 || true
+          done
+          have=$(Rscript -e 'p <- c("bit64", "tibble", "DBItest", "dplyr", "ggplot2", "igraph", "tidygraph", "arrow"); ok <- vapply(p, requireNamespace, logical(1), quietly = TRUE); cat("installed:", p[ok], "| missing:", p[!ok])')
+          echo "::notice title=Optional packages::$have"
+
+      - name: Check
+        shell: bash
+        run: |
+          # Building the vignettes would install the package (and build the engine)
+          # once more. R CMD check still re-builds them from the sources; its two
+          # WARNINGs about the missing inst/doc come from this shortcut.
+          R CMD build --no-build-vignettes --no-manual .
+          R CMD check --no-manual rladybugdb_*.tar.gz || true
+
+      - name: Report check results
+        if: always()
+        shell: bash
+        run: |
+          check_log=$(find . -name 00check.log 2>/dev/null | head -n 1)
+          [ -n "$check_log" ] || { echo "::warning title=R CMD check::no 00check.log"; exit 0; }
+          echo "::notice title=R CMD check::$(grep -E '^Status:|used C\+\+ compiler|\.\.\. .*(NOTE|WARNING|ERROR)' "$check_log" | awk 'BEGIN { ORS = "%0A" } { gsub(/%/, "%25"); print }')"
+          tests=$(find "$(dirname "$check_log")/tests" -name 'testthat.Rout*' 2>/dev/null | head -n 1)
+          if [ -n "$tests" ]; then
+            echo "::notice title=Tests::$(grep -E '^\[ FAIL' "$tests" | tail -n 1)"
+          fi
+
+      - name: Report sanitizer and ODR findings
+        if: always()
+        shell: bash
+        run: |
+          check_log=$(find . -name 00check.log 2>/dev/null | head -n 1)
+          [ -n "$check_log" ] || exit 0
+          rcheck=$(dirname "$check_log")
+          # Only the check's own output: the installation log, the example and
+          # test transcripts, and the vignette logs (not the package sources).
+          outputs=$(find "$rcheck" -maxdepth 2 -type f -not -path '*/00_pkg_src/*' \
+            \( -name 00install.out -o -name '*.Rout' -o -name '*.Rout.fail' -o -name '*.log' \) | sort)
+          reports=$(printf '%s\n' "$outputs" | xargs grep -h -E 'runtime error:|ERROR: AddressSanitizer' 2>/dev/null \
+            | sed -E 's#^.*/lbug-src/#lbug-src/#; s/0x[0-9a-f]+/ADDR/g' \
+            | sort | uniq -c | sort -rn || true)
+          if [ -n "$reports" ]; then
+            n=$(printf '%s\n' "$reports" | wc -l | tr -d ' ')
+            msg=$(printf '%s\n' "$reports" | awk 'NR <= 40 { gsub(/%/, "%25"); printf "%s%%0A", $0 }')
+            echo "::warning title=Sanitizer reports (${n} distinct)::$msg"
+          else
+            echo "::notice title=Sanitizer reports::None in: $(printf '%s\n' "$outputs" | sed "s#^$rcheck/##" | tr '\n' ' ')"
+          fi
+          odr=$(printf '%s\n' "$outputs" | xargs grep -h -E 'One Definition Rule|\[-Wodr\]' 2>/dev/null | sort -u | awk 'NR <= 10' || true)
+          if [ -n "$odr" ]; then
+            echo "::warning title=ODR warnings::$(printf '%s\n' "$odr" | awk '{ gsub(/%/, "%25"); printf "%s%%0A", $0 }')"
+          else
+            echo "::notice title=ODR warnings::None"
+          fi
+          lto=$(grep -c -E -- '-flto' "$rcheck/00install.out" 2>/dev/null || true)
+          echo "::notice title=LTO::00install.out lines mentioning -flto: ${lto:-0}"

@@ -110,10 +110,12 @@ rewrite_std_format <- function(lbug_source) {
 }
 
 # Order matters: the macOS compatibility patch is made against the rewritten
-# tree.
+# tree, and each later patch against the result of the one before it.
 apply_patch("tools/patches/ladybugdb-cran.patch")
 rewrite_std_format(lbug_source)
 apply_patch("tools/patches/ladybugdb-macos-compat.patch")
+apply_patch("tools/patches/ladybugdb-sanitizers.patch")
+apply_patch("tools/patches/ladybugdb-windows-arm64.patch")
 
 dir.create("tools/vendor", recursive = TRUE, showWarnings = FALSE)
 archive <- normalizePath(

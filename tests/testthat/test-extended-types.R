@@ -30,8 +30,14 @@ test_that("wide numbers, JSON, BLOB, ARRAY, UNION, and intervals are explicit", 
   result <- lb_execute(conn, "RETURN CAST('{}' AS JSON) AS json")
   expect_equal(lb_result_info(result)$column_types, "JSON")
   lb_close(result)
+})
 
-  options(rladybugdb.bigint = "integer64")
+test_that("UINT64 values beyond the integer64 range stay character", {
+  skip_if_not_installed("bit64")
+  conn <- make_test_conn()
+  old <- options(rladybugdb.bigint = "integer64")
+  on.exit(options(old), add = TRUE)
+
   expect_equal(
     lb_query(conn, "RETURN CAST(18446744073709551615 AS UINT64) AS value")$value,
     "18446744073709551615"

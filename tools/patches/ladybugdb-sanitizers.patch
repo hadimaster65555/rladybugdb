@@ -1,0 +1,558 @@
+diff --git a/src/common/types/value/value.cpp b/src/common/types/value/value.cpp
+index b280ccf..d41f21b 100644
+--- a/src/common/types/value/value.cpp
++++ b/src/common/types/value/value.cpp
+@@ -10,6 +10,7 @@
+ #include "common/types/blob.h"
+ #include "common/types/string_t.h"
+ #include "common/types/uuid.h"
++#include "common/unaligned_access.h"
+ #include "common/vector/value_vector.h"
+ #include "function/hash/hash_functions.h"
+ #include "storage/storage_utils.h"
+@@ -355,86 +356,87 @@ void Value::copyFromRowLayout(const uint8_t* value) {
+     case LogicalTypeID::TIMESTAMP_TZ:
+     case LogicalTypeID::TIMESTAMP:
+     case LogicalTypeID::INT64: {
+-        val.int64Val = *((int64_t*)value);
++        val.int64Val = loadUnaligned<int64_t>(value);
+     } break;
+     case LogicalTypeID::DATE:
+     case LogicalTypeID::INT32: {
+-        val.int32Val = *((int32_t*)value);
++        val.int32Val = loadUnaligned<int32_t>(value);
+     } break;
+     case LogicalTypeID::INT16: {
+-        val.int16Val = *((int16_t*)value);
++        val.int16Val = loadUnaligned<int16_t>(value);
+     } break;
+     case LogicalTypeID::INT8: {
+         val.int8Val = *((int8_t*)value);
+     } break;
+     case LogicalTypeID::UINT64: {
+-        val.uint64Val = *((uint64_t*)value);
++        val.uint64Val = loadUnaligned<uint64_t>(value);
+     } break;
+     case LogicalTypeID::UINT32: {
+-        val.uint32Val = *((uint32_t*)value);
++        val.uint32Val = loadUnaligned<uint32_t>(value);
+     } break;
+     case LogicalTypeID::UINT16: {
+-        val.uint16Val = *((uint16_t*)value);
++        val.uint16Val = loadUnaligned<uint16_t>(value);
+     } break;
+     case LogicalTypeID::UINT8: {
+         val.uint8Val = *((uint8_t*)value);
+     } break;
+     case LogicalTypeID::INT128: {
+-        val.int128Val = *((int128_t*)value);
++        val.int128Val = loadUnaligned<int128_t>(value);
+     } break;
+     case LogicalTypeID::BOOL: {
+         val.booleanVal = *((bool*)value);
+     } break;
+     case LogicalTypeID::DOUBLE: {
+-        val.doubleVal = *((double*)value);
++        val.doubleVal = loadUnaligned<double>(value);
+     } break;
+     case LogicalTypeID::FLOAT: {
+-        val.floatVal = *((float*)value);
++        val.floatVal = loadUnaligned<float>(value);
+     } break;
+     case LogicalTypeID::DECIMAL: {
+         switch (dataType.getPhysicalType()) {
+         case PhysicalTypeID::INT16:
+-            val.int16Val = (*(int16_t*)value);
++            val.int16Val = loadUnaligned<int16_t>(value);
+             break;
+         case PhysicalTypeID::INT32:
+-            val.int32Val = (*(int32_t*)value);
++            val.int32Val = loadUnaligned<int32_t>(value);
+             break;
+         case PhysicalTypeID::INT64:
+-            val.int64Val = (*(int64_t*)value);
++            val.int64Val = loadUnaligned<int64_t>(value);
+             break;
+         case PhysicalTypeID::INT128:
+-            val.int128Val = (*(int128_t*)value);
++            val.int128Val = loadUnaligned<int128_t>(value);
+             break;
+         default:
+             UNREACHABLE_CODE;
+         }
+     } break;
+     case LogicalTypeID::INTERVAL: {
+-        val.intervalVal = *((interval_t*)value);
++        val.intervalVal = loadUnaligned<interval_t>(value);
+     } break;
+     case LogicalTypeID::INTERNAL_ID: {
+-        val.internalIDVal = *((nodeID_t*)value);
++        val.internalIDVal = loadUnaligned<nodeID_t>(value);
+     } break;
+     case LogicalTypeID::UINT128: {
+-        val.uint128Val = *((uint128_t*)value);
++        val.uint128Val = loadUnaligned<uint128_t>(value);
+     } break;
+     case LogicalTypeID::BLOB: {
+-        strVal = ((blob_t*)value)->value.getAsString();
++        strVal = loadUnaligned<blob_t>(value).value.getAsString();
+     } break;
+     case LogicalTypeID::UUID: {
+-        val.int128Val = ((uuid*)value)->value;
+-        strVal = UUID::toString(*((uuid*)value));
++        auto uuidVal = loadUnaligned<uuid>(value);
++        val.int128Val = uuidVal.value;
++        strVal = UUID::toString(uuidVal);
+     } break;
+     case LogicalTypeID::JSON:
+     case LogicalTypeID::STRING: {
+-        strVal = ((string_t*)value)->getAsString();
++        strVal = loadUnaligned<string_t>(value).getAsString();
+     } break;
+     case LogicalTypeID::MAP:
+     case LogicalTypeID::LIST: {
+-        copyFromRowLayoutList(*(list_t*)value, ListType::getChildType(dataType));
++        copyFromRowLayoutList(loadUnaligned<list_t>(value), ListType::getChildType(dataType));
+     } break;
+     case LogicalTypeID::ARRAY: {
+-        copyFromRowLayoutList(*(list_t*)value, ArrayType::getChildType(dataType));
++        copyFromRowLayoutList(loadUnaligned<list_t>(value), ArrayType::getChildType(dataType));
+     } break;
+     case LogicalTypeID::UNION: {
+         copyFromUnion(value);
+@@ -446,7 +448,7 @@ void Value::copyFromRowLayout(const uint8_t* value) {
+         copyFromRowLayoutStruct(value);
+     } break;
+     case LogicalTypeID::POINTER: {
+-        val.pointer = *((uint8_t**)value);
++        val.pointer = loadUnaligned<uint8_t*>(value);
+     } break;
+     default:
+         UNREACHABLE_CODE;
+@@ -757,7 +759,7 @@ void Value::copyFromUnion(const uint8_t* unionValue) {
+     auto unionValues = unionNullValues + NullBuffer::getNumBytesForNullValues(childrenTypes.size());
+     // For union dataType, only one member can be active at a time. So we don't need to copy all
+     // union fields into value.
+-    auto activeFieldIdx = UnionType::getInternalFieldIdx(*(union_field_idx_t*)unionValues);
++    auto activeFieldIdx = UnionType::getInternalFieldIdx(loadUnaligned<union_field_idx_t>(unionValues));
+     // Create default value now that we know the active field
+     auto childValue = Value::createDefaultValue(*childrenTypes[activeFieldIdx]);
+     auto curMemberIdx = 0u;
+diff --git a/src/common/vector/value_vector.cpp b/src/common/vector/value_vector.cpp
+index 2fd5215..0da0fb5 100644
+--- a/src/common/vector/value_vector.cpp
++++ b/src/common/vector/value_vector.cpp
+@@ -10,6 +10,7 @@
+ #include "common/types/uint128_t.h"
+ #include "common/types/value/nested.h"
+ #include "common/types/value/value.h"
++#include "common/unaligned_access.h"
+ #include "common/vector/auxiliary_buffer.h"
+ 
+ namespace lbug {
+@@ -100,7 +101,8 @@ void ValueVector::copyFromRowData(uint32_t pos, const uint8_t* rowData) {
+     } break;
+     case PhysicalTypeID::STRING:
+     case PhysicalTypeID::JSON: {
+-        StringVector::addString(this, pos, *(string_t*)rowData);
++        auto str = loadUnaligned<string_t>(rowData);
++        StringVector::addString(this, pos, str);
+     } break;
+     default: {
+         auto dataTypeSize = LogicalTypeUtils::getRowLayoutSize(dataType);
+@@ -568,7 +570,8 @@ void StringVector::addString(lbug::common::ValueVector* vector, string_t& dstStr
+ void StringVector::copyToRowData(const ValueVector* vector, uint32_t pos, uint8_t* rowData,
+     InMemOverflowBuffer* rowOverflowBuffer) {
+     auto& srcStr = vector->getValue<string_t>(pos);
+-    auto& dstStr = *(string_t*)rowData;
++    // Start from the bytes already in the row, as the in-place update did.
++    auto dstStr = loadUnaligned<string_t>(rowData);
+     if (string_t::isShortString(srcStr.len)) {
+         dstStr.setShortString(srcStr);
+     } else {
+@@ -576,6 +579,7 @@ void StringVector::copyToRowData(const ValueVector* vector, uint32_t pos, uint8_
+             reinterpret_cast<uint64_t>(rowOverflowBuffer->allocateSpace(srcStr.len));
+         dstStr.setLongString(srcStr);
+     }
++    storeUnaligned(rowData, dstStr);
+ }
+ 
+ void ListVector::copyListEntryAndBufferMetaData(ValueVector& vector,
+@@ -600,7 +604,7 @@ void ListVector::copyListEntryAndBufferMetaData(ValueVector& vector,
+ 
+ void ListVector::copyFromRowData(ValueVector* vector, uint32_t pos, const uint8_t* rowData) {
+     DASSERT(validateType(*vector));
+-    auto& srcList = *(list_t*)rowData;
++    auto srcList = loadUnaligned<list_t>(rowData);
+     auto srcNullBytes = reinterpret_cast<uint8_t*>(srcList.overflowPtr);
+     auto srcListValues = srcNullBytes + NullBuffer::getNumBytesForNullValues(srcList.size);
+     auto dstListEntry = addList(vector, srcList.size);
+@@ -623,13 +627,14 @@ void ListVector::copyToRowData(const ValueVector* vector, uint32_t pos, uint8_t*
+     InMemOverflowBuffer* rowOverflowBuffer) {
+     auto& srcListEntry = vector->getValue<list_entry_t>(pos);
+     auto srcListDataVector = ListVector::getDataVector(vector);
+-    auto& dstListEntry = *(list_t*)rowData;
++    list_t dstListEntry;
+     dstListEntry.size = srcListEntry.size;
+     auto nullBytesSize = NullBuffer::getNumBytesForNullValues(dstListEntry.size);
+     auto dataRowLayoutSize = LogicalTypeUtils::getRowLayoutSize(srcListDataVector->dataType);
+     auto dstListOverflowSize = dataRowLayoutSize * dstListEntry.size + nullBytesSize;
+     auto dstListOverflow = rowOverflowBuffer->allocateSpace(dstListOverflowSize);
+     dstListEntry.overflowPtr = reinterpret_cast<uint64_t>(dstListOverflow);
++    storeUnaligned(rowData, dstListEntry);
+     NullBuffer::initNullBytes(dstListOverflow, dstListEntry.size);
+     auto dstListValues = dstListOverflow + nullBytesSize;
+     for (auto i = 0u; i < srcListEntry.size; i++) {
+diff --git a/src/include/common/unaligned_access.h b/src/include/common/unaligned_access.h
+new file mode 100644
+index 0000000..a072a85
+--- /dev/null
++++ b/src/include/common/unaligned_access.h
+@@ -0,0 +1,30 @@
++#pragma once
++
++#include <cstring>
++#include <type_traits>
++
++namespace lbug {
++namespace common {
++
++// Row layouts (factorized table tuples, the overflow data of unflat columns, the
++// row data of lists and structs, and the sort-key blocks) pack values without
++// padding, so a value stored there may be misaligned for its type.
++// Dereferencing such an address through a typed pointer or reference is
++// undefined behaviour, which -fsanitize=alignment reports, so values in those
++// layouts are copied in and out with memcpy instead.
++template<typename T>
++inline T loadUnaligned(const void* src) {
++    static_assert(std::is_trivially_copyable<T>::value, "loadUnaligned needs a trivially copyable type");
++    T value;
++    std::memcpy(static_cast<void*>(&value), src, sizeof(T));
++    return value;
++}
++
++template<typename T>
++inline void storeUnaligned(void* dst, const T& value) {
++    static_assert(std::is_trivially_copyable<T>::value, "storeUnaligned needs a trivially copyable type");
++    std::memcpy(dst, static_cast<const void*>(&value), sizeof(T));
++}
++
++} // namespace common
++} // namespace lbug
+diff --git a/src/include/processor/operator/hash_join/join_hash_table.h b/src/include/processor/operator/hash_join/join_hash_table.h
+index 9c19369..d047277 100644
+--- a/src/include/processor/operator/hash_join/join_hash_table.h
++++ b/src/include/processor/operator/hash_join/join_hash_table.h
+@@ -2,6 +2,7 @@
+ 
+ #include "processor/result/base_hash_table.h"
+ #include "processor/result/factorized_table.h"
++#include "common/unaligned_access.h"
+ 
+ namespace lbug {
+ namespace storage {
+@@ -54,6 +55,10 @@ public:
+     uint8_t** getPrevTuple(const uint8_t* tuple) const {
+         return (uint8_t**)(tuple + prevPtrColOffset);
+     }
++    // The previous-tuple pointer column of a tuple may be misaligned.
++    uint8_t* loadPrevTuple(const uint8_t* tuple) const {
++        return common::loadUnaligned<uint8_t*>(tuple + prevPtrColOffset);
++    }
+     uint8_t* getTupleForHash(common::hash_t hash) {
+         auto slotIdx = getSlotIdxForHash(hash);
+         DASSERT(slotIdx < maxNumHashSlots);
+diff --git a/src/include/processor/operator/order_by/order_by_key_encoder.h b/src/include/processor/operator/order_by/order_by_key_encoder.h
+index 3ca92de..8b6f868 100644
+--- a/src/include/processor/operator/order_by/order_by_key_encoder.h
++++ b/src/include/processor/operator/order_by/order_by_key_encoder.h
+@@ -6,6 +6,7 @@
+ #include "common/vector/value_vector.h"
+ #include "order_by_data_info.h"
+ #include "processor/result/factorized_table.h"
++#include "common/unaligned_access.h"
+ 
+ namespace lbug {
+ namespace processor {
+@@ -53,14 +54,15 @@ public:
+ 
+     static uint32_t getNumBytesPerTuple(const std::vector<common::ValueVector*>& keyVectors);
+ 
++    // The tuple info follows the encoded keys, so it may be misaligned.
+     static inline uint32_t getEncodedFTBlockIdx(const uint8_t* tupleInfoPtr) {
+-        return *(uint32_t*)tupleInfoPtr;
++        return common::loadUnaligned<uint32_t>(tupleInfoPtr);
+     }
+ 
+     // Note: We only encode 3 bytes for ftBlockOffset, but we are reading 4 bytes from tupleInfoPtr.
+     // We need to do a bit mask to set the most significant byte to 0x00.
+     static inline uint32_t getEncodedFTBlockOffset(const uint8_t* tupleInfoPtr) {
+-        return (*(uint32_t*)(tupleInfoPtr + 4) & 0x00FFFFFF);
++        return (common::loadUnaligned<uint32_t>(tupleInfoPtr + 4) & 0x00FFFFFF);
+     }
+ 
+     static inline uint8_t getEncodedFTIdx(const uint8_t* tupleInfoPtr) {
+diff --git a/src/processor/operator/hash_join/join_hash_table.cpp b/src/processor/operator/hash_join/join_hash_table.cpp
+index 1f90a71..53eac0a 100644
+--- a/src/processor/operator/hash_join/join_hash_table.cpp
++++ b/src/processor/operator/hash_join/join_hash_table.cpp
+@@ -161,7 +161,7 @@ sel_t JoinHashTable::matchFlatKeys(const std::vector<ValueVector*>& keyVectors,
+         auto currentTuple = probedTuples[0];
+         matchedTuples[numMatchedTuples] = currentTuple;
+         numMatchedTuples += matchFlatVecWithEntry(keyVectors, currentTuple);
+-        probedTuples[0] = *getPrevTuple(currentTuple);
++        probedTuples[0] = loadPrevTuple(currentTuple);
+     }
+     return numMatchedTuples;
+ }
+@@ -180,14 +180,14 @@ sel_t JoinHashTable::matchUnFlatKey(ValueVector* keyVector, uint8_t** probedTupl
+                 numMatchedTuples++;
+                 break;
+             }
+-            probedTuples[i] = *getPrevTuple(currentTuple);
++            probedTuples[i] = loadPrevTuple(currentTuple);
+         }
+     }
+     return numMatchedTuples;
+ }
+ 
+ uint8_t** JoinHashTable::findHashSlot(const uint8_t* tuple) const {
+-    auto hash = *(hash_t*)(tuple + getHashValueColOffset());
++    auto hash = loadUnaligned<hash_t>(tuple + getHashValueColOffset());
+     auto slotIdx = getSlotIdxForHash(hash);
+     return (uint8_t**)(hashSlotsBlocks[slotIdx >> numSlotsPerBlockLog2]->getData() +
+                        (slotIdx & slotIdxInBlockMask) * sizeof(uint8_t*));
+diff --git a/src/processor/operator/intersect/intersect.cpp b/src/processor/operator/intersect/intersect.cpp
+index f711d73..d7dbef4 100644
+--- a/src/processor/operator/intersect/intersect.cpp
++++ b/src/processor/operator/intersect/intersect.cpp
+@@ -57,7 +57,7 @@ void Intersect::probeHTs() {
+             if (*(nodeID_t*)flatTuple == key) {
+                 probedFlatTuples[i].push_back(flatTuple);
+             }
+-            flatTuple = *sharedHTs[i]->getHashTable()->getPrevTuple(flatTuple);
++            flatTuple = sharedHTs[i]->getHashTable()->loadPrevTuple(flatTuple);
+         }
+     }
+ }
+diff --git a/src/processor/operator/order_by/order_by_key_encoder.cpp b/src/processor/operator/order_by/order_by_key_encoder.cpp
+index b009b59..62a5e31 100644
+--- a/src/processor/operator/order_by/order_by_key_encoder.cpp
++++ b/src/processor/operator/order_by/order_by_key_encoder.cpp
+@@ -182,8 +182,8 @@ void OrderByKeyEncoder::encodeFTIdx(uint32_t numEntriesToEncode, uint8_t* tupleI
+         auto nextBatchOfEntries = std::min(numEntriesToEncode - numUpdatedFTInfoEntries,
+             numTuplesPerBlockInFT - ftBlockOffset);
+         for (auto i = 0u; i < nextBatchOfEntries; i++) {
+-            *(uint32_t*)tupleInfoPtr = ftBlockIdx;
+-            *(uint32_t*)(tupleInfoPtr + 4) = ftBlockOffset;
++            storeUnaligned<uint32_t>(tupleInfoPtr, ftBlockIdx);
++            storeUnaligned<uint32_t>(tupleInfoPtr + 4, ftBlockOffset);
+             *(uint8_t*)(tupleInfoPtr + 7) = ftIdx;
+             tupleInfoPtr += numBytesPerTuple;
+             ftBlockOffset++;
+diff --git a/src/processor/operator/path_property_probe.cpp b/src/processor/operator/path_property_probe.cpp
+index a85800c..c88bcbd 100644
+--- a/src/processor/operator/path_property_probe.cpp
++++ b/src/processor/operator/path_property_probe.cpp
+@@ -306,11 +306,11 @@ void PathPropertyProbe::probe(lbug::processor::JoinHashTable* hashTable, uint64_
+         auto id = idVector->getValue<internalID_t>(sizeProbed + i);
+         while (localState.probedTuples[i]) {
+             auto currentTuple = localState.probedTuples[i];
+-            if (*(internalID_t*)currentTuple == id) {
++            if (loadUnaligned<internalID_t>(currentTuple) == id) {
+                 localState.matchedTuples[i] = currentTuple;
+                 break;
+             }
+-            localState.probedTuples[i] = *hashTable->getPrevTuple(currentTuple);
++            localState.probedTuples[i] = hashTable->loadPrevTuple(currentTuple);
+         }
+         if (localState.matchedTuples[i] == nullptr) {
+             throw RuntimeException(lbug::common::stringFormat(
+diff --git a/src/processor/result/base_hash_table.cpp b/src/processor/result/base_hash_table.cpp
+index 0c4cce3..f5d7d1f 100644
+--- a/src/processor/result/base_hash_table.cpp
++++ b/src/processor/result/base_hash_table.cpp
+@@ -10,6 +10,7 @@
+ #include "common/utils.h"
+ #include "function/comparison/comparison_functions.h"
+ #include "function/hash/vector_hash_functions.h"
++#include "common/unaligned_access.h"
+ 
+ using namespace lbug::common;
+ using namespace lbug::function;
+@@ -53,7 +54,9 @@ static bool compareEntry(const common::ValueVector* vector, uint32_t vectorPos,
+     const uint8_t* entry) {
+     uint8_t result = 0;
+     auto key = vector->getData() + vectorPos * vector->getNumBytesPerValue();
+-    function::Equals::operation(*(T*)key, *(T*)entry, result, nullptr /* leftVector */,
++    // Factorized table entries may be misaligned for T.
++    const auto entryValue = loadUnaligned<T>(entry);
++    function::Equals::operation(*(T*)key, entryValue, result, nullptr /* leftVector */,
+         nullptr /* rightVector */);
+     return result != 0;
+ }
+@@ -61,7 +64,7 @@ static bool compareEntry(const common::ValueVector* vector, uint32_t vectorPos,
+ template<typename T>
+ static bool factorizedTableCompareEntry(const uint8_t* entry1, const uint8_t* entry2,
+     const LogicalType&) {
+-    return function::Equals::operation(*(T*)entry1, *(T*)entry2);
++    return function::Equals::operation(loadUnaligned<T>(entry1), loadUnaligned<T>(entry2));
+ }
+ 
+ static ft_compare_function_t getFactorizedTableCompareEntryFunc(const LogicalType& type);
+@@ -69,19 +72,19 @@ static ft_compare_function_t getFactorizedTableCompareEntryFunc(const LogicalTyp
+ template<>
+ bool factorizedTableCompareEntry<list_entry_t>(const uint8_t* entry1, const uint8_t* entry2,
+     const LogicalType& type) {
+-    const auto* list1 = reinterpret_cast<const list_t*>(entry1);
+-    const auto* list2 = reinterpret_cast<const list_t*>(entry2);
+-    if (list1->size != list2->size) {
++    const auto list1 = loadUnaligned<list_t>(entry1);
++    const auto list2 = loadUnaligned<list_t>(entry2);
++    if (list1.size != list2.size) {
+         return false;
+     }
+     const auto& childType = ListType::getChildType(type);
+     const auto childSize = LogicalTypeUtils::getRowLayoutSize(childType);
+-    const auto nullPtr1 = reinterpret_cast<const uint8_t*>(list1->overflowPtr);
+-    const auto nullPtr2 = reinterpret_cast<const uint8_t*>(list2->overflowPtr);
+-    const auto dataPtr1 = nullPtr1 + NullBuffer::getNumBytesForNullValues(list1->size);
+-    const auto dataPtr2 = nullPtr2 + NullBuffer::getNumBytesForNullValues(list2->size);
++    const auto nullPtr1 = reinterpret_cast<const uint8_t*>(list1.overflowPtr);
++    const auto nullPtr2 = reinterpret_cast<const uint8_t*>(list2.overflowPtr);
++    const auto dataPtr1 = nullPtr1 + NullBuffer::getNumBytesForNullValues(list1.size);
++    const auto dataPtr2 = nullPtr2 + NullBuffer::getNumBytesForNullValues(list2.size);
+     auto compareFunc = getFactorizedTableCompareEntryFunc(childType);
+-    for (size_t index = 0; index < list1->size; index++) {
++    for (size_t index = 0; index < list1.size; index++) {
+         const bool child1IsNull = NullBuffer::isNull(nullPtr1, index);
+         const bool child2IsNull = NullBuffer::isNull(nullPtr2, index);
+         if (child1IsNull != child2IsNull) {
+@@ -154,15 +157,15 @@ template<>
+     uint32_t vectorPos, const uint8_t* entry) {
+     auto dataVector = ListVector::getDataVector(vector);
+     auto listToCompare = vector->getValue<list_entry_t>(vectorPos);
+-    auto listEntry = reinterpret_cast<const list_t*>(entry);
+-    auto entryNullBytes = reinterpret_cast<uint8_t*>(listEntry->overflowPtr);
+-    auto entryValues = entryNullBytes + NullBuffer::getNumBytesForNullValues(listEntry->size);
++    const auto listEntry = loadUnaligned<list_t>(entry);
++    auto entryNullBytes = reinterpret_cast<uint8_t*>(listEntry.overflowPtr);
++    auto entryValues = entryNullBytes + NullBuffer::getNumBytesForNullValues(listEntry.size);
+     auto rowLayoutSize = LogicalTypeUtils::getRowLayoutSize(dataVector->dataType);
+     compare_function_t compareFunc = getCompareEntryFunc(dataVector->dataType);
+-    if (listToCompare.size != listEntry->size) {
++    if (listToCompare.size != listEntry.size) {
+         return false;
+     }
+-    for (auto i = 0u; i < listEntry->size; i++) {
++    for (auto i = 0u; i < listEntry.size; i++) {
+         const bool entryChildIsNull = NullBuffer::isNull(entryNullBytes, i);
+         const bool vectorChildIsNull = dataVector->isNull(listToCompare.offset + i);
+         if (entryChildIsNull != vectorChildIsNull) {
+diff --git a/src/processor/result/factorized_table.cpp b/src/processor/result/factorized_table.cpp
+index 78a41ab..d207d9e 100644
+--- a/src/processor/result/factorized_table.cpp
++++ b/src/processor/result/factorized_table.cpp
+@@ -7,6 +7,7 @@
+ #include "common/null_buffer.h"
+ #include "common/vector/value_vector.h"
+ #include "storage/buffer_manager/memory_manager.h"
++#include "common/unaligned_access.h"
+ 
+ using namespace lbug::common;
+ using namespace lbug::storage;
+@@ -274,7 +275,8 @@ uint64_t FactorizedTable::getNumFlatTuples(ft_tuple_idx_t tupleIdx) const {
+         auto groupID = column->getGroupID();
+         if (!calculatedGroups.contains(groupID)) {
+             calculatedGroups[groupID] = true;
+-            numFlatTuples *= column->isFlat() ? 1 : ((overflow_value_t*)tupleBuffer)->numElements;
++            numFlatTuples *=
++                column->isFlat() ? 1 : loadUnaligned<overflow_value_t>(tupleBuffer).numElements;
+         }
+         tupleBuffer += column->getNumBytes();
+     }
+@@ -563,7 +565,7 @@ overflow_value_t FactorizedTable::appendVectorToUnflatTupleBlocks(const ValueVec
+ void FactorizedTable::readUnflatCol(uint8_t** tuplesToRead, ft_col_idx_t colIdx,
+     ValueVector& vector) const {
+     auto overflowColValue =
+-        *(overflow_value_t*)(tuplesToRead[0] + tableSchema.getColOffset(colIdx));
++        loadUnaligned<overflow_value_t>(tuplesToRead[0] + tableSchema.getColOffset(colIdx));
+     DASSERT(vector.state->getSelVector().isUnfiltered());
+     auto numBytesPerValue = LogicalTypeUtils::getRowLayoutSize(vector.dataType);
+     if (hasNoNullGuarantee(colIdx)) {
+@@ -592,7 +594,8 @@ void FactorizedTable::readUnflatCol(uint8_t** tuplesToRead, ft_col_idx_t colIdx,
+ 
+ void FactorizedTable::readUnflatCol(const uint8_t* tupleToRead, const SelectionVector& selVector,
+     ft_col_idx_t colIdx, ValueVector& vector) const {
+-    auto vectorOverflowValue = *(overflow_value_t*)(tupleToRead + tableSchema.getColOffset(colIdx));
++    auto vectorOverflowValue =
++        loadUnaligned<overflow_value_t>(tupleToRead + tableSchema.getColOffset(colIdx));
+     DASSERT(vector.state->getSelVector().isUnfiltered());
+     if (hasNoNullGuarantee(colIdx)) {
+         vector.setAllNonNull();
+@@ -704,15 +707,15 @@ void FactorizedTableIterator::resetState() {
+ 
+ void FactorizedTableIterator::readUnflatColToFlatTuple(ft_col_idx_t colIdx, uint8_t* valueBuffer,
+     FlatTuple& tuple) {
+-    auto overflowValue =
+-        (overflow_value_t*)(valueBuffer + factorizedTable.getTableSchema()->getColOffset(colIdx));
++    auto overflowValue = loadUnaligned<overflow_value_t>(
++        valueBuffer + factorizedTable.getTableSchema()->getColOffset(colIdx));
+     auto groupID = factorizedTable.getTableSchema()->getColumn(colIdx)->getGroupID();
+     auto tupleSizeInOverflowBuffer =
+         LogicalTypeUtils::getRowLayoutSize(tuple[colIdx].getDataType());
+-    valueBuffer = overflowValue->value +
++    valueBuffer = overflowValue.value +
+                   tupleSizeInOverflowBuffer * flatTuplePositionsInDataChunk[groupID].first;
+     auto isNull = factorizedTable.isOverflowColNull(
+-        overflowValue->value + tupleSizeInOverflowBuffer * overflowValue->numElements,
++        overflowValue.value + tupleSizeInOverflowBuffer * overflowValue.numElements,
+         flatTuplePositionsInDataChunk[groupID].first, colIdx);
+     tuple[colIdx].setNull(isNull);
+     if (!isNull) {
+@@ -756,7 +759,8 @@ void FactorizedTableIterator::updateNumElementsInDataChunk() {
+         auto numElementsInDataChunk =
+             column->isFlat() ?
+                 1 :
+-                ((overflow_value_t*)(currentTupleBuffer + colOffsetInTupleBuffer))->numElements;
++                loadUnaligned<overflow_value_t>(currentTupleBuffer + colOffsetInTupleBuffer)
++                    .numElements;
+         if (groupID >= flatTuplePositionsInDataChunk.size()) {
+             flatTuplePositionsInDataChunk.resize(groupID + 1);
+         }
+diff --git a/third_party/mbedtls/include/mbedtls/private_access.h b/third_party/mbedtls/include/mbedtls/private_access.h
+index 3d15a98..54e0e04 100644
+--- a/third_party/mbedtls/include/mbedtls/private_access.h
++++ b/third_party/mbedtls/include/mbedtls/private_access.h
+@@ -23,10 +23,12 @@
+ #ifndef MBEDTLS_PRIVATE_ACCESS_H
+ #define MBEDTLS_PRIVATE_ACCESS_H
+ 
+-#ifndef MBEDTLS_ALLOW_PRIVATE_ACCESS
+-#define MBEDTLS_PRIVATE(member) private_##member
+-#else
++/* This copy of Mbed TLS is compiled as C++ and its structs are also used by
++ * LadybugDB's own sources. Upstream renames private members outside the
++ * library (MBEDTLS_ALLOW_PRIVATE_ACCESS is defined only in library/common.h),
++ * which gives one struct two different definitions and violates the C++ One
++ * Definition Rule (reported by GCC's -Wodr under link-time optimisation).
++ * Use the same member names everywhere. */
+ #define MBEDTLS_PRIVATE(member) member
+-#endif
+ 
+ #endif /* MBEDTLS_PRIVATE_ACCESS_H */
+diff --git a/third_party/re2/onepass.cpp b/third_party/re2/onepass.cpp
+index 7ae1383..fae731b 100644
+--- a/third_party/re2/onepass.cpp
++++ b/third_party/re2/onepass.cpp
+@@ -145,7 +145,9 @@ namespace regex {
+ // the memory footprint.)
+ struct OneState {
+     uint32_t matchcond; // conditions to match right now.
+-    uint32_t action[1];
++    // A flexible array member, as in upstream RE2: states are allocated with
++    // bytemap_range() actions each.
++    uint32_t action[];
+ };
+ 
+ // The uint32_t conditions in the action are a combination of
