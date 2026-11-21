@@ -3,9 +3,9 @@
 rladybugdb 0.4.4 was archived on 2026-11-06 because installation errors on
 the four CRAN macOS flavors were not corrected in time. Version 0.4.6 fixes
 those errors and the two additional issues that the CRAN auto-check reported
-for 0.4.4, gcc-UBSAN and M1mac. Version 0.4.5, submitted on 2026-11-21, had
-the macOS fixes but not the gcc-UBSAN fixes, so I asked CRAN not to process
-it.
+for 0.4.4, gcc-UBSAN and M1mac. Version 0.4.5, submitted earlier on
+2026-11-21, had the macOS fixes but not the gcc-UBSAN fixes. This submission
+replaces it, so please disregard the pending 0.4.5 submission.
 
 All other flavors were OK for 0.4.4. The other changes are small: ggplot2
 and dplyr, which one vignette loads, are declared in Suggests; the bundled
@@ -132,8 +132,7 @@ Other checks of 0.4.6:
   Rcpp reads the libc++ `std::string` with libstdc++'s layout; 0.4.4 fails
   identically there, and in R-hub's debian-clang image (clang 23 and libc++,
   every package built from source) the tests of 0.4.5 passed.
-* win-builder (R-devel, R-release, and R-oldrelease): submitted on
-  2026-11-21, results pending.
+* win-builder (R-devel, R-release, and R-oldrelease): OK.
 
 Checks of 0.4.5 for the older macOS toolchains (the macOS-specific code is
 unchanged in 0.4.6):
