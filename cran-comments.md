@@ -61,30 +61,49 @@ upstream crate by `tools/vendor.R`; {fmt} is credited in `inst/COPYRIGHTS`.
 
 Local, macOS 26.6.2 (arm64), `R CMD check --as-cran` of the built tarball:
 
-* R 4.6.1, Apple clang 21, CMake available only as
-  `/Applications/CMake.app` (not on the `PATH`), as on CRAN's macOS machines:
-  `configure` found CMake.app and selected `std::format`; 1 NOTE (archived
-  package), no warnings; tests, examples, vignettes, and both manuals OK.
-* R 4.6.1, Apple clang 21, macOS 15.4 SDK, `MACOSX_DEPLOYMENT_TARGET=11.0`
-  (selects the bundled {fmt}): installs, all tests pass. The only WARNING is
-  an `ld` deployment-target mismatch against this R build's `libR.dylib`
-  (built for macOS 13), which does not arise on CRAN's macOS 11 builds.
-* R 4.6.1 with the macOS 14 SDK (CRAN r-release-macos-arm64 setup): PENDING
-* R 4.5 (big-sur arm64 build) with Apple clang 14.0.0 from Command Line
-  Tools 14.2 (CRAN r-oldrel-macos-arm64 compiler), macOS 11 target: PENDING
-* Bundled engine compiled with Apple clang 14.0.3 from Command Line Tools
-  14.3.1 for x86_64, macOS 11 target (CRAN macOS x86_64 compiler): PENDING
+* R 4.6.1 (CRAN's arm64 build), Apple clang 21, with CMake available only
+  as `/Applications/CMake.app` (not on the `PATH`), as on CRAN's macOS
+  machines: `configure` found CMake.app and selected `std::format`; 1 NOTE
+  (archived package); tests, examples, vignettes, and both manuals OK.
+* R 4.5.2 (CRAN's big-sur arm64 build, as on r-oldrel-macos-arm64) with
+  LLVM clang 14.0.6 and its libc++, the open-source counterpart of Apple
+  clang 14.0.0 (Apple's Command Line Tools 14.2 were not available here),
+  the macOS 15.4 SDK, and a macOS 11 deployment target, again with CMake
+  only as CMake.app: `configure` selected the bundled {fmt}; 1 NOTE
+  (archived package); tests OK.
+* LLVM clang 15.0.7 and its libc++ (the counterpart of Apple clang 14.0.3,
+  CRAN's x86_64 macOS compiler), x86_64, macOS 11 target: the bundled engine
+  and the package's own sources compile without errors or warnings
+  (compilation only).
 
-Remote:
+GitHub Actions:
 
-* win-builder: R-devel, R-release, R-oldrelease: PENDING
-* mac-builder: R-release, R-devel: PENDING
-* R-hub: linux (R-devel), gcc16, clang23, ubuntu-clang, ubuntu-next
-  (R-patched), ubuntu-release: PENDING
-* GitHub Actions: Ubuntu (release, oldrel-1, devel, arm64), macOS
-  (macos-14 and macos-15-intel, release and oldrel-1), Windows (release,
-  oldrel-1, devel, arm64), and CRAN-like macOS jobs with CMake only in
-  `/Applications/CMake.app`: PENDING
+* macOS 15 runner building with the macOS 14 SDK and
+  `MACOSX_DEPLOYMENT_TARGET=14.0`, with Homebrew's cmake removed and
+  CMake.app installed (the r-release-macos-arm64 setup): OK, using
+  `std::format` and the atomic builtin in place of `std::atomic_ref`.
+* The same with `MACOSX_DEPLOYMENT_TARGET=11.0`: OK, using the bundled {fmt}.
+* macOS arm64 and x86_64 (R release and oldrel-1), Ubuntu x86_64 (R release,
+  oldrel-1, and devel), Ubuntu arm64 (R release), and Windows (R release,
+  oldrel-1, and devel): OK.
+
+R-hub:
+
+* linux (R-devel), ubuntu-release, ubuntu-next (R-patched), and ubuntu-clang
+  (clang 23.1.6 with libstdc++): OK.
+* gcc16 (Fedora 44, GCC 16.2.1): installs and passes the tests. With that
+  container's `-O3`, GCC 16 reports `-Warray-bounds` inside libstdc++'s
+  `std::sort` in one unchanged file of the bundled engine; with the `-g -O2`
+  flags of CRAN's fedora-gcc, GCC 16.2.0 gives no warnings for that file.
+* clang23 (clang 23.1.6 with libc++): installs, but the tests segfault inside
+  `demangle()` in Rcpp.so when the first `Rcpp::stop()` records its stack
+  trace, because the `std::string` built by libc++ code is read there with
+  libstdc++'s layout. Version 0.4.4 fails identically in that container. In
+  R-hub's debian-clang image (clang 23 and libc++, every package built from
+  source), the test suite of 0.4.5 passes.
+
+mac-builder was unavailable (HTTP 502) from 2026-11-15 to 2026-11-19, so the
+macOS results above come from the local and GitHub Actions runs.
 
 ## R CMD check results
 
