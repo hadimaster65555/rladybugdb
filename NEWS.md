@@ -16,6 +16,15 @@
   different definitions, which GCC reports as a One Definition Rule violation
   (`-Wodr`) when the package is built with link-time optimisation.
 
+## Other changes
+
+* The package now builds on Windows on ARM64 with the clang toolchain of
+  Rtools. The bundled fast_float library called MSVC's `__umulh` intrinsic
+  whenever `_M_ARM64` was defined, which MinGW's headers also define; as in
+  upstream fast_float, MinGW now uses its `__uint128_t` multiplication.
+* A test that switches to `integer64` output now skips when the suggested
+  bit64 package is not installed, instead of failing.
+
 # rladybugdb 0.4.5
 
 ## CRAN macOS installation

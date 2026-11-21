@@ -24,5 +24,6 @@ Apple clang releases on some CRAN macOS machines.
 The LadybugDB MIT license is also present as lbug-src/LICENSE inside that
 archive. The CRAN portability changes are recorded separately in
 tools/patches/ladybugdb-cran.patch, tools/patches/ladybugdb-macos-compat.patch,
-and tools/patches/ladybugdb-sanitizers.patch, together with the std::format
+tools/patches/ladybugdb-sanitizers.patch, and
+tools/patches/ladybugdb-windows-arm64.patch, together with the std::format
 rewrite performed by tools/vendor.R.

@@ -2,7 +2,8 @@
 # The crate is the upstream source published at crates.io; the tar.xz is the
 # locally vendored source produced by tools/vendor.R: the crate with
 # tools/patches/ladybugdb-cran.patch, the std::format rewrite,
-# tools/patches/ladybugdb-macos-compat.patch, and
-# tools/patches/ladybugdb-sanitizers.patch applied.
+# tools/patches/ladybugdb-macos-compat.patch,
+# tools/patches/ladybugdb-sanitizers.patch, and
+# tools/patches/ladybugdb-windows-arm64.patch applied.
 lbug-0.20.4.crate fa792a6ec0595098bf41f2f6d243bb705a0d4c01bb94f44e63cc49988796b0e8
-ladybugdb-0.20.4.tar.xz 34f0b0b940e50c2e3753e074375fcd6e66d85acac682ecd9d5080e170a0cd42f
+ladybugdb-0.20.4.tar.xz 8d86e3e0765fcde7006fca322e9cc0db0fcba6c52a72035f3969aab973c14fe2

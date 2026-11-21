@@ -18,7 +18,9 @@ and SHA-256 in `tools/lbug_source_checksums`.
    the rewritten tree.
 6. Apply `tools/patches/ladybugdb-sanitizers.patch`, which is made against
    the result of step 5.
-7. Create `tools/vendor/ladybugdb-<version>.tar.xz` and update its checksum.
+7. Apply `tools/patches/ladybugdb-windows-arm64.patch`, which is made against
+   the result of step 6.
+8. Create `tools/vendor/ladybugdb-<version>.tar.xz` and update its checksum.
 
 The CRAN patch adds a dedicated `LBUG_R_PACKAGE` CMake mode. It disables native
 remote-extension downloads and their OpenSSL dependency, uses already
@@ -68,6 +70,13 @@ Rule violation that CRAN's gcc-UBSAN check (GCC with `-fsanitize=undefined`,
   which in this C++ build gives structs such as `mbedtls_sha256_context`
   different definitions in different translation units (`-Wodr`).
 
+The Windows ARM64 patch lets the engine build with the clang toolchain of
+Rtools for Windows on ARM (`aarch64-w64-mingw32`). The MinGW headers define
+`_M_ARM64` there, and the bundled fast_float then called MSVC's `__umulh`
+intrinsic, which MinGW does not declare. As in upstream fast_float, that
+branch now excludes MinGW, which uses the `__uint128_t` multiplication
+instead. Other platforms compile the same code as before.
+
 LadybugDB and all bundled third-party license files remain inside the source
 archive. Run `Rscript tools/vendor.R` only when intentionally updating the
 pinned engine or the portability patches, then review and test the resulting
@@ -77,6 +86,7 @@ To change the macOS compatibility patch, prepare a tree at the state of step 4
 (upstream crate, CRAN patch, rewrite), commit it to a scratch git repository,
 make the changes there, and save the `git diff` output (default `a/` and `b/`
 prefixes, applied with `patch -p1`) as
-`tools/patches/ladybugdb-macos-compat.patch`. The sanitizer patch is made the
-same way from a tree at the state of step 5 and saved as
-`tools/patches/ladybugdb-sanitizers.patch`.
+`tools/patches/ladybugdb-macos-compat.patch`. The later patches are made the
+same way from a tree at the state of the step before them and saved as
+`tools/patches/ladybugdb-sanitizers.patch` and
+`tools/patches/ladybugdb-windows-arm64.patch`.

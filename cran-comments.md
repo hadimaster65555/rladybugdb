@@ -7,9 +7,10 @@ for 0.4.4, gcc-UBSAN and M1mac. Version 0.4.5, submitted on 2026-11-21, had
 the macOS fixes but not the gcc-UBSAN fixes, so I asked CRAN not to process
 it.
 
-There are no other functional changes; all other flavors were OK for 0.4.4.
-The only other change declares ggplot2 and dplyr, which one vignette loads,
-in Suggests.
+All other flavors were OK for 0.4.4. The other changes are small: ggplot2
+and dplyr, which one vignette loads, are declared in Suggests; the bundled
+engine now also builds on Windows on ARM64 (Rtools' clang); and a test that
+needs the suggested bit64 package now skips when bit64 is not installed.
 
 ### gcc-UBSAN
 
@@ -90,7 +91,8 @@ upstream crate by `tools/vendor.R`; {fmt} is credited in `inst/COPYRIGHTS`.
 ## Test environments
 
 Compared with 0.4.5, version 0.4.6 changes only the bundled engine (the
-sanitizer patch) and the package metadata.
+sanitizer and Windows ARM64 patches), one test, and the package metadata.
+The results below are for the final 0.4.6 sources.
 
 Sanitizer checks of 0.4.6:
 
