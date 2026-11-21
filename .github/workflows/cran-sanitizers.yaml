@@ -83,6 +83,9 @@ jobs:
       - name: Check
         shell: bash
         run: |
+          # Building the vignettes would install the package (and build the engine)
+          # once more. R CMD check still re-builds them from the sources; its two
+          # WARNINGs about the missing inst/doc come from this shortcut.
           R CMD build --no-build-vignettes --no-manual .
           R CMD check --no-manual rladybugdb_*.tar.gz || true
 
