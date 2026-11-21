@@ -46,17 +46,36 @@ jobs:
         run: |
           # Outside the package directory, so R CMD build does not pick them up.
           mkdir -p /tmp/deps
-          cat > /tmp/deps/install-deps.R <<'EOF'
-          options(Ncpus = 4L)
-          needed <- c("DBI", "Rcpp", "rlang", "testthat", "withr", "knitr", "rmarkdown")
-          install.packages(needed)
-          missing <- needed[!vapply(needed, requireNamespace, logical(1), quietly = TRUE)]
-          if (length(missing)) stop("Could not install: ", paste(missing, collapse = ", "))
+          cat > /tmp/deps/install.R <<'EOF'
+          # Usage: Rscript install.R <required: TRUE/FALSE> <package>...
+          args <- commandArgs(TRUE)
+          required <- as.logical(args[1]); pkgs <- args[-1]
+          cat("user:", Sys.info()[["user"]], "HOME:", Sys.getenv("HOME"), "\n")
+          cat("libPaths:", .libPaths(), "\nrepos:", getOption("repos"), "\n")
+          have <- function(p) vapply(p, requireNamespace, logical(1), quietly = TRUE)
+          todo <- pkgs[!have(pkgs)]
+          if (length(todo) && requireNamespace("pak", quietly = TRUE)) {
+            try(pak::pkg_install(todo, upgrade = FALSE, ask = FALSE))
+          }
+          todo <- pkgs[!have(pkgs)]
+          if (length(todo)) try(install.packages(todo, Ncpus = 4L))
+          missing <- pkgs[!have(pkgs)]
+          if (length(missing)) {
+            message("Not installed: ", paste(missing, collapse = ", "))
+            if (required) quit(status = 1)
+          }
           EOF
-          Rscript /tmp/deps/install-deps.R
+          annotate_tail() {
+            echo "::warning title=$1 (last 60 lines)::$(tail -n 60 "$2" | awk '{ gsub(/%/, "%25"); gsub(/\r/, ""); printf "%s%%0A", $0 }')"
+          }
+          if ! Rscript /tmp/deps/install.R TRUE DBI Rcpp rlang testthat withr knitr rmarkdown \
+              > /tmp/deps/required.log 2>&1; then
+            annotate_tail "Installing required packages failed" /tmp/deps/required.log
+            exit 1
+          fi
           # Optional packages: each may fail or time out without failing the job.
           for p in bit64 tibble DBItest dplyr ggplot2 igraph tidygraph arrow; do
-            timeout 1500 Rscript -e "options(Ncpus = 4L); if (!requireNamespace('$p', quietly = TRUE)) install.packages('$p')" > "/tmp/deps/install-$p.log" 2>&1 || true
+            timeout 1500 Rscript /tmp/deps/install.R FALSE "$p" > "/tmp/deps/$p.log" 2>&1 || true
           done
           have=$(Rscript -e 'p <- c("bit64", "tibble", "DBItest", "dplyr", "ggplot2", "igraph", "tidygraph", "arrow"); ok <- vapply(p, requireNamespace, logical(1), quietly = TRUE); cat("installed:", p[ok], "| missing:", p[!ok])')
           echo "::notice title=Optional packages::$have"
