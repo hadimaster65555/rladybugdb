@@ -1,7 +1,8 @@
 # SHA-256 digests for LadybugDB v0.20.4 source inputs.
 # The crate is the upstream source published at crates.io; the tar.xz is the
 # locally vendored source produced by tools/vendor.R: the crate with
-# tools/patches/ladybugdb-cran.patch, the std::format rewrite, and
-# tools/patches/ladybugdb-macos-compat.patch applied.
+# tools/patches/ladybugdb-cran.patch, the std::format rewrite,
+# tools/patches/ladybugdb-macos-compat.patch, and
+# tools/patches/ladybugdb-sanitizers.patch applied.
 lbug-0.20.4.crate fa792a6ec0595098bf41f2f6d243bb705a0d4c01bb94f44e63cc49988796b0e8
-ladybugdb-0.20.4.tar.xz 53b08c831a01cbaa5a005997773c77a846d38afd390e3cf27eae507d27626b07
+ladybugdb-0.20.4.tar.xz 34f0b0b940e50c2e3753e074375fcd6e66d85acac682ecd9d5080e170a0cd42f

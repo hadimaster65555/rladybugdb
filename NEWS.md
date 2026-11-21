@@ -1,3 +1,21 @@
+# rladybugdb 0.4.6
+
+## CRAN sanitizer and link-time checks
+
+* The bundled engine no longer reads or writes values at misaligned
+  addresses. Factorized-table tuples, the row data of strings, lists and
+  structs, hash-join entries, and the tuple information stored after encoded
+  sort keys pack values without padding; the code that accessed them through
+  typed pointers or references now copies them with `memcpy`. CRAN's
+  gcc-UBSAN check reported these accesses as undefined behaviour.
+* The bundled RE2 library declares the action table of its one-pass matcher
+  as a flexible array member, as upstream RE2 does, instead of a one-element
+  array indexed past its end (reported by `-fsanitize=bounds-strict`).
+* The bundled Mbed TLS headers now give struct members the same names in all
+  of the engine's source files. The SHA-256 context struct previously had two
+  different definitions, which GCC reports as a One Definition Rule violation
+  (`-Wodr`) when the package is built with link-time optimisation.
+
 # rladybugdb 0.4.5
 
 ## CRAN macOS installation
