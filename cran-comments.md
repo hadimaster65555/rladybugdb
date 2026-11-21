@@ -119,14 +119,19 @@ Other checks of 0.4.6:
   CMake.app installed (the r-release-macos-arm64 setup), and the same with
   `MACOSX_DEPLOYMENT_TARGET=11.0` (bundled {fmt}); macOS arm64 and x86_64
   (R release and oldrel-1), Ubuntu x86_64 (R release, oldrel-1, and devel),
-  Ubuntu arm64 (R release), and Windows (R release, oldrel-1, and devel):
-  OK.
+  Ubuntu arm64 (R release), Windows x86_64 (R release, oldrel-1, and
+  devel), and Windows ARM64 (R release, Rtools' clang 19): OK.
 * R-hub: linux (R-devel), ubuntu-release, ubuntu-next (R-patched), and
   ubuntu-clang (clang 23): OK. gcc16 (Fedora 44, GCC 16.2.1) installs and
   passes the tests; with that container's `-O3`, GCC 16 reports
   `-Warray-bounds` inside libstdc++'s `std::sort` in one unchanged file of
   the bundled engine, while with the `-g -O2` flags of CRAN's fedora-gcc,
-  GCC 16.2.0 gives no warnings for that file.
+  GCC 16.2.0 gives no warnings for that file. clang23 (clang 23 with libc++)
+  installs, but the tests segfault inside `demangle()` in Rcpp.so when the
+  first `Rcpp::stop()` records its stack trace, because that container's
+  Rcpp reads the libc++ `std::string` with libstdc++'s layout; 0.4.4 fails
+  identically there, and in R-hub's debian-clang image (clang 23 and libc++,
+  every package built from source) the tests of 0.4.5 passed.
 * win-builder (R-devel, R-release, and R-oldrelease): submitted on
   2026-11-21, results pending.
 
