@@ -3,7 +3,8 @@
 rladybugdb 0.4.4 was archived on 2026-11-06 because installation errors on
 the four CRAN macOS flavors were not corrected in time. Version 0.4.5 fixes
 those errors. It makes no other functional changes; all other flavors were
-OK for 0.4.4.
+OK for 0.4.4. The only other change declares ggplot2 and dplyr, which one
+vignette loads, in Suggests.
 
 ### r-release-macos-x86_64, r-oldrel-macos-arm64, r-oldrel-macos-x86_64
 
@@ -101,6 +102,8 @@ R-hub:
   libstdc++'s layout. Version 0.4.4 fails identically in that container. In
   R-hub's debian-clang image (clang 23 and libc++, every package built from
   source), the test suite of 0.4.5 passes.
+
+win-builder (R-devel, R-release, and R-oldrelease): OK.
 
 mac-builder was unavailable (HTTP 502) from 2026-11-15 to 2026-11-19, so the
 macOS results above come from the local and GitHub Actions runs.

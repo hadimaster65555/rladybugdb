@@ -25,6 +25,11 @@
   objects built for a newer macOS when the SDK is newer than the running
   system and CMake 3.x is used.
 
+## Other changes
+
+* ggplot2 and dplyr, which the "Real-world graph analysis: OpenFlights"
+  vignette loads, are now listed in `Suggests`.
+
 # rladybugdb 0.4.4
 
 ## CRAN documentation

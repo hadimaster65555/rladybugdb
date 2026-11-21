@@ -29,6 +29,8 @@ Suggests:
     tidygraph,
     testthat (>= 3.0.0),
     withr,
+    dplyr,
+    ggplot2,
     knitr,
     rmarkdown
 VignetteBuilder: knitr
