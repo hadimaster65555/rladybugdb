@@ -43,7 +43,7 @@ jobs:
     # NO NEED TO CHECKOUT HERE
     - uses: r-hub/actions/setup@v1
       with:
-        config: ${{ github.event.inputs.config || 'linux,gcc16,clang23,ubuntu-clang,ubuntu-next,ubuntu-release,gcc-asan' }}
+        config: ${{ github.event.inputs.config || 'linux,gcc16,clang23,ubuntu-clang,ubuntu-next,ubuntu-release' }}
       id: rhub-setup
 
   linux-containers:
